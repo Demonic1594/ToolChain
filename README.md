@@ -16,8 +16,10 @@ toolchain — no compiler-version drift between machines.
 ./run.sh                # full pipeline: extract -> prep -> env -> build -> verify
 ```
 
-That is all. The ROM lands in `modules/06-eliteredux-source/pokeemerald_modern.gba`
-and stage 5 boot-tests it in the bundled scriptable mGBA (2500 frames).
+That is all. First run without a local archive downloads ~447 MB from the
+`toolchain-v1` release (SHA256-verified before extraction). The ROM lands in
+`modules/06-eliteredux-source/pokeemerald_modern.gba` and stage 5 boot-tests
+it in the bundled scriptable mGBA (2500 frames).
 
 One-time prerequisites by host arch:
 
@@ -67,9 +69,11 @@ tail -f logs/build.log          # watch progress; grep MAKE_EXIT for completion
 
 ```
 run.sh                  stage runner
-archives/               the complete x86-64 toolchain package, split into
-                        5 parts of <=90 MB (GitHub's per-file limit), with
-                        SHA256SUMS (per part + joined archive)
+archives/               SHA256SUMS (per part + joined archive). The archive
+                        itself (~447 MB) lives as the GitHub Release asset
+                        `toolchain-v1`; stage 0 downloads it automatically on
+                        first run (override with TOOLCHAIN_ARCHIVE_URL) or
+                        uses local parts / joined zip when present
 scripts/                one stage per script + fetch-x86_64-root.sh,
                         selftest.sh (toolchain smoke test), check-compile.sh
 .github/workflows/      CI: full pipeline (selftest -> build -> boot test)

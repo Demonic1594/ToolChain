@@ -3,3 +3,5 @@ devkitARM/
 logs/
 build.log
 *.o
+archives/pkmn-ER-toolchain.zip
+archives/pkmn-ER-toolchain.zip.part-*

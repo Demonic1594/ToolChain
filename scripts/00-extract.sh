@@ -11,22 +11,33 @@ if [ -d "$ROOT/modules/06-eliteredux-source" ] && [ "$FORCE" -eq 0 ]; then
     exit 0
 fi
 
-ls "$ARCH"/pkmn-ER-toolchain.zip.part-* >/dev/null 2>&1 || { echo "[00] ERROR: no archive parts in $ARCH"; exit 1; }
-
-echo "[00] Verifying part checksums..."
-(cd "$ARCH" && grep 'part-' SHA256SUMS | sha256sum -c -)
+EXPECT=$(sed -n 's/^# joined-sha256=//p' "$ARCH/SHA256SUMS")
+ZIP="$ARCH/pkmn-ER-toolchain.zip"
+if [ -f "$ZIP" ]; then
+    echo "[00] Using existing joined archive: $ZIP"
+elif ls "$ARCH"/pkmn-ER-toolchain.zip.part-* >/dev/null 2>&1; then
+    echo "[00] Verifying part checksums..."
+    (cd "$ARCH" && grep 'part-' SHA256SUMS | sha256sum -c -)
+    echo "[00] Joining parts..."
+    cat "$ARCH"/pkmn-ER-toolchain.zip.part-* > "$ZIP"
+else
+    URL="${TOOLCHAIN_ARCHIVE_URL:-https://github.com/Demonic1594/ToolChain/releases/download/toolchain-v1/pkmn-ER-toolchain.zip}"
+    echo "[00] No local archive - downloading $URL"
+    command -v curl >/dev/null || { echo "[00] ERROR: curl needed to download the toolchain (or provide archives/ parts)"; exit 1; }
+    mkdir -p "$ARCH"
+    curl -fL --retry 3 --retry-delay 5 -o "$ZIP.tmp" "$URL" || { echo "[00] ERROR: download failed"; rm -f "$ZIP.tmp"; exit 1; }
+    mv "$ZIP.tmp" "$ZIP"
+fi
 
 echo "[00] Verifying joined archive hash..."
-EXPECT=$(sed -n 's/^# joined-sha256=//p' "$ARCH/SHA256SUMS")
-GOT=$(cat "$ARCH"/pkmn-ER-toolchain.zip.part-* | sha256sum | cut -d' ' -f1)
+GOT=$(sha256sum "$ZIP" | cut -d' ' -f1)
 [ "$EXPECT" = "$GOT" ] || { echo "[00] ERROR: joined hash mismatch"; exit 1; }
 
 [ -d "$ROOT/modules/.backup" ] && echo "[00] NOTE: backups from a previous --force live in modules/.backup/"
 mkdir -p "$STAGING"
-cat "$ARCH"/pkmn-ER-toolchain.zip.part-* > "$STAGING/toolchain.zip"
 
 echo "[00] Extracting (python3 LZMA-capable)..."
-python3 - "$STAGING/toolchain.zip" "$STAGING/x" <<'PY'
+python3 - "$ZIP" "$STAGING/x" <<'PY'
 import sys, zipfile
 z = zipfile.ZipFile(sys.argv[1])
 z.extractall(sys.argv[2])
