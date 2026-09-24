@@ -25,7 +25,7 @@ One-time prerequisites by host arch:
 
 | Host | Setup |
 |---|---|
-| x86_64 | `apt install build-essential libpng-dev` (or distro equivalent). Stages 0-3 then run natively. |
+| x86_64 | `apt install build-essential libpng-dev` plus the ffmpeg 6.1 runtime libs (`libavcodec60 libavfilter9 libavformat60 libavutil58 libswresample4 libswscale7 libpostproc57` - names from Ubuntu 24.04/noble; needed by the bundled mGBA harness). Stages 0-3 then run natively. |
 | aarch64 | `apk add qemu-x86_64 make perl zstd` (or distro equivalent), then `./scripts/fetch-x86_64-root.sh` once (needs network, ~250 MB). Stage 2 auto-detects the arch and wraps every x86-64 binary in a qemu shim. |
 
 ## Stages

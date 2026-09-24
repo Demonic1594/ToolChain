@@ -88,7 +88,12 @@ else
 fi
 
 echo "[selftest] --- mGBA harness ---"
-if "$MOD_PY/bin/python3.11" -c "import mgba.core" 2>/dev/null; then ok "python3.11 imports mgba"; else bad "python3.11 import mgba (sysroot libs missing? run scripts/fetch-x86_64-root.sh)"; fi
+MG_ERR="$("$MOD_PY/bin/python3.11" -c 'import mgba.core' 2>&1 >/dev/null)"
+if [ $? -eq 0 ]; then ok "python3.11 imports mgba"
+else
+  bad "python3.11 import mgba (sysroot libs missing? run scripts/fetch-x86_64-root.sh)"
+  echo "$MG_ERR" | head -3 | sed 's/^/    /'
+fi
 
 echo "[selftest] --- summary: $PASS passed, $FAIL failed ---"
 exit $((FAIL > 0))
