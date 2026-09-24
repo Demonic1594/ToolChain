@@ -78,7 +78,7 @@ try to rebuild them (details under the session log below).
 | `modules/05-python-mgba/mgba-libs/` | The actual `libmgba.so` + dependencies (`libinih`, `libzip`) that the Python bindings need at runtime |
 | `scripts/02-env.sh` | Sets up a unified toolchain directory + exports all the env vars below. **Source it, don't execute it.** (stage 3 of `run.sh`) |
 | `scripts/01-restore-exec-bits.sh` | Restores executable bits after a Python-based extraction and touches prebuilt host tools. Run with `bash`, not `source` (stage 1 of `run.sh`) |
-| `modules/07-tools-notes/` | Emulator test scripts and the C stub examples used for cheats / calling game functions (see [project/](project/)), plus `check-compile.sh` - compiles single files with the exact Makefile flags in seconds (much faster than a full build) |
+| `modules/07-tools-notes/` | Emulator test scripts and the C stub examples used for cheats / calling game functions (see [project/](project/)), plus `check-compile.sh` - compiles single files with the exact Makefile flags in seconds (much faster than a full build). Repo-tracked copy (survives `--force` re-extraction): `scripts/check-compile.sh` |
 | `modules/09-reference-roms/` | `pkmn-emerald_modern.gba`: ROM built from this source plus the bug-hunt fixes (5-9 in [project/fixes.md](project/fixes.md); fixes 10-33 were added after it, so it will differ) by an earlier session; for comparison only |
 
 ## The single most important thing to know
