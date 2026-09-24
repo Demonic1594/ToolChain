@@ -10,7 +10,14 @@
 > | `restore-exec-bits.sh` | `scripts/01-restore-exec-bits.sh` (stage 1) |
 > | manual `make -j1` + `runmake-background.sh` | `scripts/03-build.sh` / `./run.sh --only 4` |
 > | `eliteredux-source/` | `modules/06-eliteredux-source/` |
-> | `gcc-arm-none-eabi/`, `binutils-arm-none-eabi/`, `jdk-21/`, `kotlinc/`, `python3.11-mgba/`, `tools-notes/`, `reference-roms/` | `modules/02-gcc/`, `modules/01-binutils/`, `modules/03-jdk/`, `modules/04-kotlinc/`, `modules/05-python-mgba/`, `modules/07-tools-notes/`, `modules/09-reference-roms/` |
+> | `gcc-arm-none-eabi/` | `modules/02-gcc/` |
+> | `binutils-arm-none-eabi/` | `modules/01-binutils/` |
+> | `jdk-21/` | `modules/03-jdk/` |
+> | `kotlinc/` | `modules/04-kotlinc/` |
+> | `python3.11-mgba/` + `mgba-libs/` | `modules/05-python-mgba/` |
+> | `tools-notes/` | `modules/07-tools-notes/` |
+> | `agbcc/` | `modules/08-agbcc/` |
+> | `reference-roms/` | `modules/09-reference-roms/` |
 > | the LZMA zip | `archives/` (split parts; stage 0 rejoins and verifies them) |
 >
 > Start at the repository root `README.md` for the quick start. Everything
@@ -19,7 +26,19 @@
 Everything about **getting the package running**: extracting it, environment
 setup, building, gotchas, and how the archive itself is packaged.
 For game changes, cheats, learnset edits, bug-fix notes and the emulator test
-harness, see **`README-PROJECT.md`**.
+harness, see **[project/](project/)**.
+
+## Contents
+
+- [Extracting (read this first)](#extracting-read-this-first)
+- [What's in here](#whats-in-here)
+- [The single most important thing to know](#the-single-most-important-thing-to-know)
+- [Toolchain fixes applied in this package version](#toolchain-fixes-applied-in-this-package-version)
+- [Quick start](#quick-start)
+- [Important build gotchas](#important-build-gotchas-all-real-things-that-happened)
+- [Packaging for delivery through a chat interface](#packaging-for-delivery-through-a-chat-interface)
+- [What `build/` is, and why dropping it is safe](#what-modules06eliteredux-sourcebuild-is-and-why-dropping-it-from-a-delivered-package-is-safe)
+- [Session logs](#session-log-extracting-and-building-in-a-restricted-sandbox)
 
 Quick pointer for a new session: `./run.sh` (or, manually: stages 0-3, then
 `cd modules/06-eliteredux-source && make -j1`).
@@ -38,7 +57,7 @@ Python's `extractall()` still does NOT restore them. If you extracted with
 Python, run the exec-bit restore script that ships in the package:
 
 ```bash
-bash restore-exec-bits.sh      # from the package root
+bash scripts/01-restore-exec-bits.sh   # stage 1 of run.sh
 ```
 
 (`7z`/real `unzip` builds preserve permissions, so the script is only needed
@@ -49,22 +68,22 @@ try to rebuild them (details under the session log below).
 
 | Folder | What it is |
 |---|---|
-| `eliteredux-source/` | The patched Elite Redux source tree (the "upcoming" branch, not "master" - see below). Updated to **v2.65.2.3b**; `pokeemerald_modern.gba`/`.elf`/`.map` in the tree root are a fresh `make -j1` build of exactly this source (`build/` object cache is not shipped, so the next `make` is a full ~8-20 min build) |
-| `gcc-arm-none-eabi/` | Modern ARM cross-compiler (GCC 13.2), trimmed to just the parts actually used (removed ~2.7GB of unused Cortex-M/R multilib variants) |
-| `binutils-arm-none-eabi/` | ARM assembler/linker/objcopy/etc (matches the gcc version) |
-| `agbcc/` | The legacy compiler this project's `INSTALL.md` mentions - built from source, but **not what actually works** for this codebase (see below) |
-| `jdk-21/` | Java JDK (javac + runtime) - needed to compile the proto codegen tool |
-| `kotlinc/` | Kotlin compiler - also needed for the codegen tool (part of it is Kotlin) |
-| `python3.11-mgba/` | Custom-built Python 3.11 (the system only had 3.12) with `mgba`, `cffi`, and `capstone` installed - a full scriptable GBA emulator for testing |
-| `mgba-libs/` | The actual `libmgba.so` + dependencies (`libinih`, `libzip`) that the Python bindings need at runtime |
-| `setup.sh` | Sets up a unified toolchain directory + exports all the env vars below. **Source it, don't execute it.** |
-| `restore-exec-bits.sh` | Restores executable bits after a Python-based extraction and touches prebuilt host tools. Run with `bash`, not `source` |
-| `tools-notes/` | Emulator test scripts and the C stub examples used for cheats / calling game functions (see `README-PROJECT.md`), plus `check-compile.sh` - compiles single files with the exact Makefile flags in seconds (much faster than a full build) |
-| `reference-roms/` | `pkmn-emerald_modern.gba`: ROM built from this source plus the bug-hunt fixes (5-9 in `README-PROJECT.md`; fixes 10-27 were added after it, so it will differ) by an earlier session; for comparison only |
+| `modules/06-eliteredux-source/` | The patched Elite Redux source tree (the "upcoming" branch, not "master" - see below). Updated to **v2.65.2.3b**; `pokeemerald_modern.gba`/`.elf`/`.map` in the tree root are a fresh `make -j1` build of exactly this source (`build/` object cache is not shipped, so the next `make` is a full ~8-20 min build) |
+| `modules/02-gcc/` | Modern ARM cross-compiler (GCC 13.2), trimmed to just the parts actually used (removed ~2.7GB of unused Cortex-M/R multilib variants) |
+| `modules/01-binutils/` | ARM assembler/linker/objcopy/etc (matches the gcc version) |
+| `modules/08-agbcc/` | The legacy compiler this project's `INSTALL.md` mentions - built from source, but **not what actually works** for this codebase (see below) |
+| `modules/03-jdk/` | Java JDK (javac + runtime) - needed to compile the proto codegen tool |
+| `modules/04-kotlinc/` | Kotlin compiler - also needed for the codegen tool (part of it is Kotlin) |
+| `modules/05-python-mgba/python3.11-mgba/` | Custom-built Python 3.11 (the system only had 3.12) with `mgba`, `cffi`, and `capstone` installed - a full scriptable GBA emulator for testing |
+| `modules/05-python-mgba/mgba-libs/` | The actual `libmgba.so` + dependencies (`libinih`, `libzip`) that the Python bindings need at runtime |
+| `scripts/02-env.sh` | Sets up a unified toolchain directory + exports all the env vars below. **Source it, don't execute it.** (stage 3 of `run.sh`) |
+| `scripts/01-restore-exec-bits.sh` | Restores executable bits after a Python-based extraction and touches prebuilt host tools. Run with `bash`, not `source` (stage 1 of `run.sh`) |
+| `modules/07-tools-notes/` | Emulator test scripts and the C stub examples used for cheats / calling game functions (see [project/](project/)), plus `check-compile.sh` - compiles single files with the exact Makefile flags in seconds (much faster than a full build) |
+| `modules/09-reference-roms/` | `pkmn-emerald_modern.gba`: ROM built from this source plus the bug-hunt fixes (5-9 in [project/fixes.md](project/fixes.md); fixes 10-33 were added after it, so it will differ) by an earlier session; for comparison only |
 
 ## The single most important thing to know
 
-**Use the `upcoming` branch / this `eliteredux-source/` tree, built with
+**Use the `upcoming` branch / this `modules/06-eliteredux-source/` tree, built with
 `gcc-arm-none-eabi` (the "modern" build). Do NOT use the `master` branch.**
 
 Why: `master` has no code-generation pipeline (no `proto/`, no
@@ -75,14 +94,14 @@ Elite Redux mechanics, because the actual current game-balance data was
 never wired in. This took a long time to figure out and produced two
 "working" ROMs that were actually wrong before the real cause was found.
 
-`eliteredux-source/` (from the `upcoming` branch) has a real pipeline:
+`modules/06-eliteredux-source/` (from the `upcoming` branch) has a real pipeline:
 `.proto`/`.textproto` files in `proto/` get compiled by a Kotlin/Java tool
 (`tools/codegen/`) into the actual C/C++ source data (`src/abilities.cc`,
 generated headers, etc.) at build time. This is the one that's actually
 correct. It also needs `gcc-arm-none-eabi`, not `agbcc` - the codebase
 uses modern C bitfield syntax that `agbcc` can't even parse.
 
-The `agbcc/` folder is included because the project's own `INSTALL.md`
+The `modules/08-agbcc/` folder is included because the project's own `INSTALL.md`
 tells you to use it, and it's needed if you ever want to build the
 *original* `master` branch for comparison - but for this patched source
 tree, ignore it and use the modern toolchain instead.
@@ -91,9 +110,9 @@ tree, ignore it and use the modern toolchain instead.
 ## Toolchain fixes applied in this package version
 
 Two build-breaking toolchain issues were found and fixed in this version of
-the package (game-source fixes are listed in `README-PROJECT.md`):
+the package (game-source fixes are listed in [project/fixes.md](project/fixes.md)):
 
-1. **Bundled JDK was missing its runtime** - `jdk-21/` originally shipped
+1. **Bundled JDK was missing its runtime** - `modules/03-jdk/` originally shipped
    with only `jmods/` (module definitions), not an actual runnable
    `bin/`/`lib/` JDK - so `java`/`javac` didn't exist. Fixed by using the
    `jdk.jlink` module (itself one of the bundled jmods) to link a real,
@@ -109,7 +128,7 @@ the package (game-source fixes are listed in `README-PROJECT.md`):
      --output jdk-21-runtime
    ```
 
-   `jdk-21/` now contains a genuine full JDK (`bin/java`, `bin/javac`,
+   `modules/03-jdk/` now contains a genuine full JDK (`bin/java`, `bin/javac`,
    `lib/server/libjvm.so`, etc.) built straight from the jmods that were
    already in the package, alongside the original `jmods/` folder (kept
    for reference / future custom images). If this ever regresses again,
@@ -117,7 +136,7 @@ the package (game-source fixes are listed in `README-PROJECT.md`):
    no need to hunt down a matching JDK install elsewhere.
 
 2. **Makefile had a hardcoded, machine-specific library path** -
-   `eliteredux-source/Makefile`'s modern-build `LIBPATH` pointed at
+   `modules/06-eliteredux-source/Makefile`'s modern-build `LIBPATH` pointed at
    `/home/claude/toolchain/gcc_arm_extract/...`, an absolute path from
    the machine the Makefile was last generated on. On any other
    machine/session this doesn't exist, so linking fails with `cannot
@@ -125,7 +144,7 @@ the package (game-source fixes are listed in `README-PROJECT.md`):
    time instead of hardcoding it again: `LIBPATH` now resolves the real
    `gcc-arm-none-eabi` install location by following the
    `arm-none-eabi-gcc` symlink inside `$(DEVKITARM)/bin` (the directory
-   `setup.sh` builds), so it works no matter where this package gets
+   `scripts/02-env.sh` builds), so it works no matter where this package gets
    extracted:
 
    ```make
@@ -133,7 +152,7 @@ the package (game-source fixes are listed in `README-PROJECT.md`):
    LIBPATH := -L "$(GCC_ARM_ROOT)/lib/gcc/arm-none-eabi/13.2.1" -L "$(GCC_ARM_ROOT)/lib/arm-none-eabi/newlib"
    ```
 
-   No `setup.sh` changes were needed for this one - it only relies on
+   No `scripts/02-env.sh` changes were needed for this one - it only relies on
    `DEVKITARM`, which was already being exported. Both fixes were
    verified directly (a full JDK compile-and-run round-trip, and a real
    `arm-none-eabi-gcc` compile+link using the new `LIBPATH`) rather than
@@ -144,8 +163,8 @@ the package (game-source fixes are listed in `README-PROJECT.md`):
 
 ```bash
 cd wherever-you-extracted-this
-source setup.sh          # NOT ./setup.sh - it needs to export into your shell
-cd eliteredux-source
+source scripts/02-env.sh  # NOT ./scripts/02-env.sh - it needs to export into your shell
+cd modules/06-eliteredux-source
 make -j1
 ```
 
@@ -164,21 +183,21 @@ in this package.
   "*.o" -delete` before resuming, or you'll get baffling "undefined
   reference" link errors from a truncated file that looks up-to-date to
   `make`'s timestamp check.
-- **`DEVKITARM` env var must be set** (setup.sh does this). The
+- **`DEVKITARM` env var must be set** (`scripts/02-env.sh` does this). The
   Makefile's internal `PATH_MODERNCC` construction is broken without it -
   it builds a nonsense PATH string and silently falls through to
   "command not found" for the compiler.
 - **A bare `as`/`ld` must resolve to the ARM ones, not the host's.** GCC
   invokes a plain unprefixed `as` internally via PATH lookup rather than
-  `arm-none-eabi-as`. Without the symlink shim setup.sh creates, it
+  `arm-none-eabi-as`. Without the symlink shim `scripts/02-env.sh` creates, it
   silently picks up the host x86_64 assembler and produces broken output
   with a confusing `-march=armv4t` error that looks like the ARM
   assembler is broken (it isn't - it's not even being called).
 - **`CPATH` / `CPLUS_INCLUDE_PATH` must point at the newlib headers.**
   This GCC was built `--without-newlib`, so it doesn't auto-discover
-  `string.h` etc. via the usual relative path trick. setup.sh sets these.
+  `string.h` etc. via the usual relative path trick. `scripts/02-env.sh` sets these.
 - Two GCC-version compatibility patches are already applied to the
-  Makefile in `eliteredux-source/`: `-std=gnu23`/`gnu++23` were downgraded
+  Makefile in `modules/06-eliteredux-source/`: `-std=gnu23`/`gnu++23` were downgraded
   to `-std=gnu2x`/`gnu++2b` (this GCC is 13.2; the newer flag names only
   exist in GCC 14+), and `-Wno-builtin-declaration-mismatch
   -fno-strict-aliasing` were added (real ABI-assumption mismatches and
@@ -188,12 +207,12 @@ in this package.
 - **`make tools` will try to `wget` a few things** (protoc, poryscript,
   the Kotlin protobuf plugin) if they're missing - this fails with no
   network. They're already built/placed correctly inside
-  `eliteredux-source/tools/` in this package, so this shouldn't trigger,
+  `modules/06-eliteredux-source/tools/` in this package, so this shouldn't trigger,
   but if you ever wipe `tools/` and start over, you'll need to feed those
   binaries back in manually (same sources as this package: `protoc`,
   `protobuf-java.jar`, `protobuf-kotlin.jar` are all sitting in
-  `eliteredux-source/tools/codegen/`; `poryscript` is in
-  `eliteredux-source/tools/poryscript/`).
+  `modules/06-eliteredux-source/tools/codegen/`; `poryscript` is in
+  `modules/06-eliteredux-source/tools/poryscript/`).
 - **If this package was ever unzipped with Python's `zipfile` module
   instead of a real `unzip`/`7z`, every binary loses its executable
   bit.** This bit us directly: the toolchain was originally shipped as
@@ -227,28 +246,28 @@ This package has to pass through Claude's chat upload/download path at
 some point, which enforces a **500 MB per-file limit** - a file over
 that silently shows "downloading" and then "no longer available" when
 clicked, with no clearer error. That constraint, plus wanting to keep
-`jdk-21/` and `kotlinc/` in the package rather than cut them, is why
+`modules/03-jdk/` and `modules/04-kotlinc/` in the package rather than cut them, is why
 this archive is `ZIP_LZMA`-compressed instead of a plain `zip -9`:
 
 - **A first pass with standard DEFLATE (`zip -9`) couldn't fit
   everything.** The raw unpacked toolchain is ~1.3-1.5 GB depending on
-  whether `eliteredux-source/build/`'s object-file cache is included.
-  `zip -9` of the whole thing (including `jdk-21/`/`kotlinc/`) came out
+  whether `modules/06-eliteredux-source/build/`'s object-file cache is included.
+  `zip -9` of the whole thing (including `modules/03-jdk/`/`modules/04-kotlinc/`) came out
   around 630 MB even at max DEFLATE effort - over the limit - because
   most of the bulk is already-compiled ELF binaries, `.jar`s, and
   archives (`cc1`, `cc1plus`, `libstdc++.a`, the JVM's module image,
   Kotlin's compiler jars) that DEFLATE's window size doesn't handle
-  well. Dropping `jdk-21/`+`kotlinc/` entirely got a DEFLATE build down
+  well. Dropping `modules/03-jdk/`+`modules/04-kotlinc/` entirely got a DEFLATE build down
   to ~295 MB, but that meant shipping a toolchain that can't run the
   `tools/codegen/` proto pipeline at all.
 - **Switching to LZMA (`compression=zipfile.ZIP_LZMA` via Python's
   `zipfile` module - the same compression method, and the same reason,
   as the very first version of this package) got everything back in
-  under budget: ~417 MB for the complete toolchain, `jdk-21/`,
-  `kotlinc/`, and all.** LZMA's larger dictionary window compresses
-  this kind of content meaningfully better than DEFLATE - e.g. `jdk-21/`
+  under budget: ~417 MB for the complete toolchain, `modules/03-jdk/`,
+  `modules/04-kotlinc/`, and all.** LZMA's larger dictionary window compresses
+  this kind of content meaningfully better than DEFLATE - e.g. `modules/03-jdk/`
   alone: 261 MB raw -> 146 MB with `zip -9` DEFLATE, but only 120 MB
-  with LZMA. It's not a universal win (`kotlinc/`'s jars barely
+  with LZMA. It's not a universal win (`modules/04-kotlinc/`'s jars barely
   shrink either way, they're already DEFLATE-compressed internally),
   but combined across the whole tree it was the difference between
   fitting and not.
@@ -269,25 +288,25 @@ this archive is `ZIP_LZMA`-compressed instead of a plain `zip -9`:
   a workaround for this environment's limits, not a requirement of the
   format.
 - `devkitARM/` is still excluded from the delivered zip on purpose, not
-  for size - it's nothing but the symlinks `setup.sh` recreates
-  automatically, so shipping it is redundant. `eliteredux-source/build/`
+  for size - it's nothing but the symlinks `scripts/02-env.sh` recreates
+  automatically, so shipping it is redundant. `modules/06-eliteredux-source/build/`
   (the ~100 MB incremental object-file cache) is also still excluded -
   regenerable by just running `make` again (see "What is
-  `eliteredux-source/build/`" below for what that costs you).
+  `modules/06-eliteredux-source/build/`" below for what that costs you).
 - If a future edit ever needs to ship the `build/` cache too (e.g. to
   hand off mid-build across sessions) and that pushes back over budget
   even with LZMA, split the delivery into two archives rather than
   dropping `jdk-21`/`kotlinc` again - losing the codegen pipeline is a
   bigger loss than a second download.
 
-## What `eliteredux-source/build/` is, and why dropping it from a
+## What `modules/06-eliteredux-source/build/` is, and why dropping it from a
 ## delivered package is safe
 
 `build/` is `make`'s incremental object-file cache - one `.o` per
 source file, timestamped, so a re-run of `make` only recompiles files
 that changed since the last build instead of starting over. It is pure
 build output, not source: everything in it is fully and deterministically
-regenerable from what's already in `eliteredux-source/` (source files +
+regenerable from what's already in `modules/06-eliteredux-source/` (source files +
 the toolchain), so a package that omits it isn't missing anything - the
 already-built `pokeemerald_modern.gba`/`.elf`/`.map` sitting in the repo
 root are proof the source + toolchain combination in this package
@@ -315,17 +334,17 @@ with no network, one core, and no `7z`:
   project's own tools. The one-liners from the gotchas above cover
   `bin/`, `*.so*` and `cc1*`; also do
   `gcc-arm-none-eabi/libexec` and every ELF/script under
-  `eliteredux-source/tools/` (`scaninc`, `mapjson`, `gbagfx`, `protoc`, ...) plus
-  `eliteredux-source/flips-linux`. Symptom of missing bits:
+  `modules/06-eliteredux-source/tools/` (`scaninc`, `mapjson`, `gbagfx`, `protoc`, ...) plus
+  `modules/06-eliteredux-source/flips-linux`. Symptom of missing bits:
   `tools/scaninc/scaninc: Permission denied` and
   `mapjson: Permission denied` (make error 126).
 - **Touch the prebuilt host tools after extracting.** Extraction gives every file
   a fresh timestamp in arbitrary order, so `make` sometimes decides a tool
   such as `tools/aif2pcm/aif2pcm` is older than its `.c` and tries to rebuild
-  it with the host `cc`. With `setup.sh` sourced that fails (ARM newlib headers
+  it with the host `cc`. With `scripts/02-env.sh` sourced that fails (ARM newlib headers
   via `CPATH`, and the ARM `as` shim: `as: unrecognized option '--64'`).
   Fix: `touch` the tool binaries so make leaves them alone.
-- `setup.sh` must be sourced from **bash** (`bash -c 'source setup.sh; ...'`);
+- `scripts/02-env.sh` must be sourced from **bash** (`bash -c 'source scripts/02-env.sh; ...'`);
   in a plain `sh` shell `source` does not exist.
 - A background `nohup make &` launched from a tool call can be killed when the
   call returns (empty log, no make process). Use a wrapper script plus
@@ -340,7 +359,7 @@ with no network, one core, and no `7z`:
 
 ## Session log: applying and building fixes 28-33 (warning-sweep pass)
 
-- Fixes 28-33 (see `README-PROJECT.md`) arrived as a written description
+- Fixes 28-33 (see [project/](project/)) arrived as a written description
   only - no diff/patch file - from a session that had run out of tool calls
   before finishing. Each fix's file and described symptom was specific enough
   to grep straight to the exact line (`hours >= 20 && hours <= 3`,
@@ -352,10 +371,10 @@ with no network, one core, and no `7z`:
   own convention for chaining fixed-point (`UQ_4_12`) multiplications
   (`val = ApplyModifier(modifier, val)`, used throughout `battle_ai_attack.c`)
   rather than inventing a shift-and-round by hand.
-- All four touched files passed `tools-notes/check-compile.sh` (`-Werror`)
+- All four touched files passed `modules/07-tools-notes/check-compile.sh` (`-Werror`)
   before attempting a full build.
-- Ran the background-build pattern from the section above via the new
-  `tools-notes/runmake-background.sh` wrapper (`setsid nohup bash -c '...'`
+- Ran the background-build pattern from the section above via the
+  `scripts/03-build.sh` background-build wrapper (`setsid nohup bash -c '...'`
   writing `MAKE_EXIT=$?` to a log). This build was faster than the
   first-ever full build described above (~8 minutes here vs. 15-20 minutes
   for an empty `build/`), since `build/`'s object cache from the earlier
@@ -370,7 +389,7 @@ with no network, one core, and no `7z`:
   frames, Groudon logo renders, no crash. Not a real playtest.
 - Re-checked `gBattleMons`/`gVolatileStructs`/`gSideStatuses` in the fresh
   `.map` against the previously re-derived addresses - unchanged, confirming
-  the cheat tables in `README-PROJECT.md` don't need another update.
+  the cheat tables in [project/cheats.md](project/cheats.md) don't need another update.
 
 ## Session log: source drop swap + rebuild (v2.65.2.3b, delta-only)
 
@@ -378,7 +397,7 @@ with no network, one core, and no `7z`:
   Inner zip extracted with Python `zipfile` (no `7z`; `unzip` can't read LZMA),
   then `bash restore-exec-bits.sh` (354 files chmod +x).
 - The new source zip was extracted to a scratch dir and compared file-by-file
-  (MD5) against the toolchain's `eliteredux-source/`. Only differences were
+  (MD5) against the toolchain's `modules/06-eliteredux-source/`. Only differences were
   applied: **19 changed files** (`proto/AbilityEnum.proto` with
   `ABILITY_FLUFFIEST_ONE`, the generated ability/species headers,
   `src/abilities.cc`, `cry_table.h`, and the regenerated codegen
@@ -386,7 +405,7 @@ with no network, one core, and no `7z`:
   `.gba`/`.elf`/`.map`/`.sav`). 54,464 unchanged files were left untouched.
   The three `README*.md` files were taken from the source zip too
   (`README-SETUP.md` was identical).
-- `tools-notes/runmake-background.sh` -> `MAKE_EXIT=0`, full build from an
+- `modules/07-tools-notes/runmake-background.sh` -> `MAKE_EXIT=0`, full build from an
   empty `build/` took about 8 minutes on one core. EWRAM 250,954 B (95.73%),
   IWRAM 25,960 B (79.22%), ROM 23,733,792 B (70.73%) - same as the shipped
   build. The rebuilt `.gba` differs from the one in the source zip by only 4
@@ -394,4 +413,4 @@ with no network, one core, and no `7z`:
 - Booted in the mGBA harness for 2500 frames with no crash (Groudon intro
   renders). Not playtested in battle.
 - Repackaged: inner zip re-created with `ZIP_LZMA`, excluding `devkitARM/`
-  (setup.sh recreates it) and `eliteredux-source/build/`.
+  (`scripts/02-env.sh` recreates it) and `modules/06-eliteredux-source/build/`.

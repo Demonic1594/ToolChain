@@ -137,7 +137,12 @@ wherever you keep your source drop, or re-package the module.
 
 ## Documentation
 
+- `docs/README.md` — documentation index + reading order
 - `docs/README-SETUP.md` — deep dive: extraction format, toolchain fixes,
   build gotchas (all still true), packaging history
-- `docs/README-PROJECT.md` — the game changes themselves: fixes 5-33, cheat
-  code tables, emulator test harness usage, address lookups
+- `docs/project/` — the game-side docs, split by topic:
+  `fixes.md` (source fixes 3-33 with verification status),
+  `game-changes.md` (Shedinja, custom abilities, learnsets),
+  `cheats.md` (emulator-verified cheat codes),
+  `testing.md` (mGBA harness usage, struct-offset derivation),
+  `open-findings.md` (open items + playtest priorities)

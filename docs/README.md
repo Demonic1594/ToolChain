@@ -1,40 +1,36 @@
-# Elite Redux build toolchain + patched source
+# Documentation
 
-> **Modular repo note:** this repository reorganizes the original flat
-> package into `modules/` driven by `./run.sh` (see the root `README.md`).
-> The notes below are kept verbatim from the package for reference; where
-> they say `eliteredux-source/` read `modules/06-eliteredux-source/`, and
-> where they say `setup.sh` / `restore-exec-bits.sh` read
-> `scripts/02-env.sh` / `scripts/01-restore-exec-bits.sh`.
+Guides shipped with the Elite Redux toolchain package, reorganized for the
+modular repository. Start at the [repository root README](../README.md) for
+the pipeline itself (`run.sh`, stages, archive layout).
 
-Two guides - read the one you need:
+## Index
 
-- **`README-SETUP.md`** - extracting the (LZMA) archive, restoring exec bits,
-  `setup.sh`, building, build gotchas, packaging notes.
-- **`README-PROJECT.md`** - what has been changed in the game and source (bug
-  fixes, Shedinja/abilities, learnsets), cheat codes, emulator test harness,
-  struct/address lookup.
+| Doc | What it covers |
+|---|---|
+| [README-SETUP.md](README-SETUP.md) | Getting the toolchain running: extraction, environment, building, every build gotcha that actually happened, packaging notes |
+| [project/](project/) | Everything about the game changes themselves — start at its [index](project/README.md) |
+| [project/fixes.md](project/fixes.md) | Source fixes 3-33, grouped by discovery pass, with verification status |
+| [project/game-changes.md](project/game-changes.md) | Shedinja rework, custom abilities, Wonder Guard hardening, learnset tables + editing gotchas |
+| [project/cheats.md](project/cheats.md) | Emulator-verified cheat codes (stat stages, always-crit, noclip) |
+| [project/testing.md](project/testing.md) | mGBA harness: boot tests, save states, memory R/W, struct-offset derivation, calling game functions |
+| [project/open-findings.md](project/open-findings.md) | Open/closed investigation items and the playtest priority list |
 
-New session shortcut: extract -> `bash restore-exec-bits.sh` (only if you used
-Python to extract) -> `bash -c 'source setup.sh'` -> read `README-SETUP.md`.
+## Reading order for a new session
 
-Note (updated): `eliteredux-source/` was replaced wholesale with a fresh
-source drop, **Elite Redux v2.65.2.3b** (see `eliteredux-source/README.md`
-for its own changelog - this update reverts Shedinja to its classic Absolute
-Guard identity, flattens Mew's base stats to 110 across the board, reworks
-Furret's stats/ability, and changes Ogerpon's non-Mega abilities/innates).
-This drop shipped source-only, with no prebuilt `pokeemerald_modern.gba`/
-`.elf`/`.map` - since built here: `make -j1` **did not build at all** until
-`ABILITY_FLUFFIEST_ONE` was added to `proto/AbilityEnum.proto` (see
-"Source update notice" in `README-PROJECT.md` for the full root cause). With
-that one-line fix applied, the tree **builds, links, and boots cleanly**
-(`MAKE_EXIT=0`, Groudon logo renders, no crash). Fixes 5-33 in
-`README-PROJECT.md` have now been re-checked against this drop and are
-present and correct; **real in-battle playtesting is still outstanding**.
-`reference-roms/pkmn-emerald_modern.gba` is unaffected by this swap and is
-still the older fixes-5-9-only reference build.
+1. Root [README](../README.md) — run `./run.sh`, done.
+2. [README-SETUP.md](README-SETUP.md) — when something doesn't behave; the
+   gotchas section explains most failure modes (wrong `as`, missing
+   `DEVKITARM`, 0-byte `.o` files after a killed build, exec bits after
+   Python extraction).
+3. [project/](project/) — before editing game source, so you know which
+   behaviors are already fixed or deliberately left alone.
 
-Latest session: the v2.65.2.3b source zip was re-applied as a delta (19 changed
-+ 4 new files, everything else left alone), rebuilt (`MAKE_EXIT=0`) and
-boot-tested. The `.gba`/`.elf`/`.map` in `eliteredux-source/` are that fresh
-build. Details: last section of `README-SETUP.md`.
+## Historical note
+
+The three original package READMEs (`README.md`, `README-SETUP.md`,
+`README-PROJECT.md`) documented a flat directory layout. They have been
+reorganized: SETUP stays (paths updated to `modules/`), PROJECT was split
+into the `project/` folder above, and the short package overview is
+superseded by the root README. Original wording was preserved wherever it
+still applies — the session logs and root-cause notes are the value here.
