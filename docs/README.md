@@ -16,6 +16,10 @@ the pipeline itself (`run.sh`, stages, archive layout).
 | [project/testing.md](project/testing.md) | mGBA harness: boot tests, save states, memory R/W, struct-offset derivation, calling game functions |
 | [project/open-findings.md](project/open-findings.md) | Open/closed investigation items and the playtest priority list |
 
+Also maintained alongside the docs: `scripts/selftest.sh` (one-command
+toolchain smoke test) and `.github/workflows/build.yml` (CI: extract ->
+selftest -> build -> boot test -> ROM artifact on every push).
+
 ## Reading order for a new session
 
 1. Root [README](../README.md) — run `./run.sh`, done.

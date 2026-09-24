@@ -35,7 +35,7 @@ One-time prerequisites by host arch:
 
 | # | Stage | What it does |
 |---|---|---|
-| 0 | `00-extract` | Rejoin `archives/` parts (SHA256-verified), extract into `modules/` |
+| 0 | `00-extract` | Resolve the toolchain archive (local joined zip → local parts → auto-download from the `toolchain-v1` release, always SHA256-verified), extract into `modules/` |
 | 1 | `01-restore-exec-bits` | `chmod +x` every ELF/script/binary, touch prebuilt host tools |
 | 2 | `01b-wrap-x86_64` | *aarch64 only:* rename each x86-64 binary to `*.x86_64` and leave a qemu-launching shim at its original path |
 | 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
@@ -126,6 +126,8 @@ Two supported workflows:
 - **Edit here, build remotely** — the repo is self-describing: push your
   commits, then on any x86-64 Linux box (Claude/ChatGPT sandbox, CI) clone,
   `./run.sh`, done. Stage 2 is a no-op there; everything runs natively.
+  Or skip the box entirely: CI (`.github/workflows/`) runs the full pipeline
+  on every push and attaches the ROM as an artifact.
 
 To move local source edits into the repo (they are gitignored via `modules/`),
 copy the changed files out of `modules/06-eliteredux-source/` and commit them

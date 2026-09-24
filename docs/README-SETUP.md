@@ -242,6 +242,15 @@ in this package.
 
 ## Packaging for delivery through a chat interface
 
+> **Update (2026-09):** the split-parts scheme below is history. The repo now
+> serves the single joined LZMA zip (~447 MB) as the `toolchain-v1` GitHub
+> Release asset; `scripts/00-extract.sh` downloads it on demand
+> (`TOOLCHAIN_ARCHIVE_URL` to override) and SHA256-verifies it against the
+> committed `archives/SHA256SUMS` before extraction. Local parts or a local
+> joined zip are still honored when present, and the parts were purged from
+> git history, so a fresh clone is kilobytes, not ~440 MB. The notes below
+> are kept for the packaging rationale and the LZMA-vs-DEFLATE findings.
+
 This package has to pass through Claude's chat upload/download path at
 some point, which enforces a **500 MB per-file limit** - a file over
 that silently shows "downloading" and then "no longer available" when
