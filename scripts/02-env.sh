@@ -44,6 +44,7 @@ export CPATH="$MOD_GCC/include/newlib"
 export CPLUS_INCLUDE_PATH="$MOD_GCC/include/newlib/c++/$CXXVER:$MOD_GCC/include/newlib/c++/$CXXVER/arm-none-eabi/thumb/nofp"
 export LD_LIBRARY_PATH="$MOD_MGBA_LIBS:${ER_X86_LIBS:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export JAVA_OPTS="-Xmx4g"
+export JAVACMD="$MOD_JDK/bin/java"  # kotlinc launcher ignores PATH; without this it exits 127 on non-Debian hosts
 export MOD_PY MOD_SRC MOD_MGBA_LIBS
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then

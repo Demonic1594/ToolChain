@@ -179,6 +179,7 @@ def load(root, url):
 load("https://deb.debian.org/debian/", "https://deb.debian.org/debian/dists/trixie/main/binary-amd64/Packages.gz")
 load("http://archive.ubuntu.com/ubuntu/", "http://archive.ubuntu.com/ubuntu/dists/noble/main/binary-amd64/Packages.gz")
 load("http://archive.ubuntu.com/ubuntu/", "http://archive.ubuntu.com/ubuntu/dists/noble/universe/binary-amd64/Packages.gz")
+low = {p.lower(): p for p in idx}
 
 def ex(url):
     deb = urllib.request.urlopen(url).read()
@@ -215,26 +216,41 @@ def sonames():
                 prev = link
 
 for p in ["libavcodec60", "libavfilter9", "libavformat60", "libavutil58",
-          "libswresample4", "libswscale7", "libpostproc57", "libavdevice60"]:
+          "libswresample4", "libswscale7", "libpostproc57", "libavdevice60",
+          "libsvtav1enc1d1", "libsvtav1dec0"]:
     if p in idx:
         ex(idx[p])
 sonames()
 
 local_first = set(os.listdir(mgba)) if os.path.isdir(mgba) else set()
 def resolve(soname):
+    # Match runtime (never -dev/-dbg) packages by full soname version, case-insensitively:
+    # e.g. libjxl.so.0.7 -> libjxl0.7, libSvtAv1Enc.so.1 -> libsvtav1enc1d1.
     if soname in local_first: return None
-    m = re.fullmatch(r"(lib[^.]*)\.so[.\d]*", soname)
-    base = m.group(1) if m else soname
-    num = re.search(r"\.so\.(\d+)", soname)
-    n = num.group(1) if num else ""
-    for c in (f"{base}{n}", f"{base}{n}t64", f"{base}-{n}", f"{base}-{n}t64", f"{base}0", base):
-        if c in idx: return c
-    for p in idx:
-        if p.startswith(base) and n in p and len(p) < len(base) + 8: return p
+    m = re.fullmatch(r"(lib[^.]*)\.so((?:\.\d+)+)", soname)
+    if not m: return None
+    stem, ver = m.group(1), m.group(2).lstrip(".")
+    v = ver.replace(".", "")
+    n = ver.split(".")[0]
+    cands = [stem + ver, stem + ver + "t64", stem + "-" + ver, stem + "-" + ver + "t64",
+             stem + v, stem + v + "t64", stem + "-" + v, stem + "-" + v + "t64",
+             stem + n, stem + n + "t64", stem + "-" + n, stem + "-" + n + "t64",
+             stem + "0", stem]
+    for c in cands:
+        cl = c.lower()
+        if cl in low and not cl.endswith(("-dev", "-dbg")): return low[cl]
+    sl = stem.lower()
+    for pl, p in low.items():
+        if pl.startswith(sl) and n in pl and len(pl) < len(sl) + 9 and not pl.endswith(("-dev", "-dbg")): return p
     return None
 
 env = dict(os.environ)
 env["LD_LIBRARY_PATH"] = mgba + ":" + out + "/lib/x86_64-linux-gnu:" + out + "/usr/lib/x86_64-linux-gnu"
+# if stage 2 already shim-wrapped the tree, $PYMT is a #!/bin/sh script and the
+# real ELF lives next to it as *.x86_64 - qemu must be given the ELF directly
+pymt_elf = pymt + ".x86_64"
+if os.path.exists(pymt_elf):
+    pymt = pymt_elf
 for rnd in range(25):
     r = subprocess.run(["/usr/bin/qemu-x86_64", "-L", out, pymt, "-c", "import mgba.core"],
                        capture_output=True, text=True, env=env)
@@ -243,7 +259,8 @@ for rnd in range(25):
         break
     m = re.search(r"(?:ImportError|symbol lookup error|error while loading shared libraries):[^\n]*?([A-Za-z0-9_+.-]+\.so[.\d]*)", r.stderr)
     if not m:
-        print("[fetch-root] WARN: unparsed import error:", r.stderr.strip().splitlines()[-1][:200])
+        tail = (r.stderr.strip() or r.stdout.strip()).splitlines()
+        print("[fetch-root] WARN: unparsed import error:", tail[-1][:200] if tail else f"rc={r.returncode} (no output)")
         break
     soname = m.group(1)
     pkg = resolve(soname)

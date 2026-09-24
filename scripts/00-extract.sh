@@ -52,9 +52,7 @@ map_dir tools-notes 07-tools-notes
 map_dir agbcc 08-agbcc
 map_dir reference-roms 09-reference-roms
 
-for f in README.md README-SETUP.md README-PROJECT.md; do
-    [ -f "$SRC/$f" ] && cp "$SRC/$f" "$ROOT/docs/$f"
-done
-
+# NOTE: the archive also ships flat-layout README*.md; intentionally NOT copied
+# over docs/ - that would clobber the repo's restructured documentation.
 rm -rf "$STAGING"
 echo "[00] done"
