@@ -11,6 +11,25 @@ if [ "$(uname -m)" = "x86_64" ]; then
 fi
 command -v qemu-x86_64 >/dev/null || { echo "[fetch-root] ERROR: apk add qemu-x86_64 first"; exit 1; }
 
+# Skip the ~250 MB refetch when the existing sysroot is already healthy
+# (guest bash runs, and the mgba harness imports if modules/ are extracted).
+sysroot_healthy() {
+  local GB="$OUT/usr/bin/bash"; [ -x "$GB" ] || GB="$OUT/bin/bash"
+  local XL="$OUT/lib/x86_64-linux-gnu:$OUT/usr/lib/x86_64-linux-gnu"
+  LD_LIBRARY_PATH="$XL" qemu-x86_64 -L "$OUT" "$GB" -c true >/dev/null 2>&1 || return 1
+  local PYMT="$ROOT/modules/05-python-mgba/python3.11-mgba/bin/python3.11"
+  if [ -x "$PYMT" ] || [ -x "$PYMT.x86_64" ]; then
+    local P="$PYMT"; [ -x "$PYMT.x86_64" ] && P="$PYMT.x86_64"
+    LD_LIBRARY_PATH="$ROOT/modules/05-python-mgba/mgba-libs:$XL" \
+      qemu-x86_64 -L "$OUT" "$P" -c 'import mgba.core' >/dev/null 2>&1 || return 1
+  fi
+  return 0
+}
+if [ "${FORCE_FETCH:-0}" != "1" ] && sysroot_healthy; then
+  echo "[fetch-root] sysroot already complete - skipping (FORCE_FETCH=1 to refetch)"
+  exit 0
+fi
+
 if [ -d "$OUT" ]; then
   OLD="$OUT.old.$$"
   mv "$OUT" "$OLD"

@@ -21,6 +21,7 @@ EXPECT=$(sed -n 's/^# joined-sha256=//p' "$ARCH/SHA256SUMS")
 GOT=$(cat "$ARCH"/pkmn-ER-toolchain.zip.part-* | sha256sum | cut -d' ' -f1)
 [ "$EXPECT" = "$GOT" ] || { echo "[00] ERROR: joined hash mismatch"; exit 1; }
 
+[ -d "$ROOT/modules/.backup" ] && echo "[00] NOTE: backups from a previous --force live in modules/.backup/"
 mkdir -p "$STAGING"
 cat "$ARCH"/pkmn-ER-toolchain.zip.part-* > "$STAGING/toolchain.zip"
 
@@ -35,7 +36,15 @@ PY
 SRC="$STAGING/x/pkmn-ER-toolchain-slim"
 map_dir() {
     if [ -d "$SRC/$1" ]; then
-        rm -rf "$ROOT/modules/$2"
+        if [ -e "$ROOT/modules/$2" ] || [ -L "$ROOT/modules/$2" ]; then
+            # keep exactly one backup generation: --force must not silently
+            # destroy local edits (modules/ is gitignored, no git safety net)
+            rm -rf "$ROOT/modules/.backup/$2".* 2>/dev/null
+            BK="$ROOT/modules/.backup/$2.$(date +%s)"
+            mkdir -p "$(dirname "$BK")"
+            mv "$ROOT/modules/$2" "$BK"
+            echo "[00] --force: existing modules/$2 moved to $BK"
+        fi
         mv "$SRC/$1" "$ROOT/modules/$2"
         echo "[00] $1 -> modules/$2"
     fi

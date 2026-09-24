@@ -1,0 +1,29 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libpng-dev
+
+      - name: Toolchain smoke test
+        run: bash scripts/selftest.sh
+
+      - name: Full pipeline (extract -> prep -> env -> build -> verify)
+        run: ./run.sh
+
+      - name: Upload ROM
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokeemerald_modern
+          path: modules/06-eliteredux-source/pokeemerald_modern.gba
+          if-no-files-found: warn

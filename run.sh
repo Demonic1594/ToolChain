@@ -9,6 +9,18 @@ FROM=0
 ONLY=""
 FORCE=""
 
+stage_index() {
+  case "$1" in
+    0|00-extract|extract)                     echo 0 ;;
+    1|01-restore-exec-bits|exec-bits|bits)    echo 1 ;;
+    2|01b-wrap-x86_64|wrap)                   echo 2 ;;
+    3|02-env|env)                             echo 3 ;;
+    4|03-build|build)                         echo 4 ;;
+    5|04-verify|verify)                       echo 5 ;;
+    *) return 1 ;;
+  esac
+}
+
 usage() {
   cat <<EOF
 Elite Redux modular build pipeline
@@ -16,9 +28,11 @@ Elite Redux modular build pipeline
 Usage: ./run.sh [options]
 
 Options:
-  --from N    start at stage N (0-4 or 00-04)
-  --only N    run only stage N
-  --force     force re-extraction (passes --force to 00-extract; WIPES modules/)
+  --from N    start at stage N: 0-5, or a stage name (00-extract, exec-bits,
+              wrap, env, build, verify), e.g. --from build
+  --only N    run only stage N (same naming)
+  --force     force re-extraction (passes --force to 00-extract; existing
+              modules/ are moved to modules/.backup/, not deleted)
   --list      list stages and exit
 
 Stages:
@@ -27,7 +41,12 @@ Stages:
   2  01b-wrap-x86_64      aarch64 hosts only: qemu shim-wrap x86_64 binaries
   3  02-env               build devkitARM shim, verify toolchain env
   4  03-build             make -j1 in eliteredux-source (waits, 15-30+ min)
-  5  04-verify            mGBA boot test of the built ROM
+  5  04-verify            data assertions + mGBA boot test of the built ROM
+
+Standalone helpers (not stages):
+  scripts/selftest.sh          smoke-test every toolchain component (~1 min)
+  scripts/check-compile.sh F.. compile-check game sources with Makefile flags
+  scripts/fetch-x86_64-root.sh (aarch64) fetch/refresh the qemu sysroot
 
 Default: run all stages sequentially.
 EOF
@@ -35,8 +54,8 @@ EOF
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --from) FROM=$((10#$2)); shift 2 ;;
-    --only) ONLY=$((10#$2)); shift 2 ;;
+    --from) FROM=$(stage_index "$2") || { echo "Unknown stage: $2"; usage; exit 1; }; shift 2 ;;
+    --only) ONLY=$(stage_index "$2") || { echo "Unknown stage: $2"; usage; exit 1; }; shift 2 ;;
     --force) FORCE="--force"; shift ;;
     --list|-l)
       for i in "${!STAGES[@]}"; do echo "$i  ${STAGES[$i]}"; done; exit 0 ;;

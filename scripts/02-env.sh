@@ -11,10 +11,10 @@ MOD_MGBA_LIBS="$PKGROOT/modules/05-python-mgba/mgba-libs"
 MOD_SRC="$PKGROOT/modules/06-eliteredux-source"
 
 mkdir -p "$PKGROOT/devkitARM/bin"
-ln -sf "$MOD_GCC"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
-ln -sf "$MOD_BINUTILS"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
+ln -sfn "$MOD_GCC"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
+ln -sfn "$MOD_BINUTILS"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
 for tool in as ld ar nm objcopy objdump ranlib strip; do
-  ln -sf "$MOD_BINUTILS/bin/arm-none-eabi-$tool" "$PKGROOT/devkitARM/bin/$tool"
+  ln -sfn "$MOD_BINUTILS/bin/arm-none-eabi-$tool" "$PKGROOT/devkitARM/bin/$tool"
 done
 
 CXXVER="$(ls "$MOD_GCC/include/newlib/c++/" 2>/dev/null | head -n1)"

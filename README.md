@@ -38,15 +38,22 @@ One-time prerequisites by host arch:
 | 2 | `01b-wrap-x86_64` | *aarch64 only:* rename each x86-64 binary to `*.x86_64` and leave a qemu-launching shim at its original path |
 | 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
 | 4 | `03-build` | Detached (`setsid nohup`) `make -j1` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
-| 5 | `04-verify` | Copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
+| 5 | `04-verify` | Data-pipeline assertions (generated ability data, ROM size, `.map`), copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
 
 Runner options:
 
 ```
-./run.sh --from 4       # resume at a stage (e.g. rebuild + verify only)
-./run.sh --only 0       # run a single stage
-./run.sh --force        # wipe modules/ and re-extract (DESTROYS local edits!)
+./run.sh --from 4       # resume at a stage (number or name: --from build)
+./run.sh --only env     # run a single stage
+./run.sh --force        # re-extract; existing modules/ moved to modules/.backup/
 ./run.sh --list         # list stages
+```
+
+Standalone helpers:
+
+```bash
+bash scripts/selftest.sh            # smoke-test every toolchain component (~1 min)
+bash scripts/check-compile.sh FILE… # compile-check game sources (exact Makefile flags, -Werror)
 ```
 
 Useful after editing game source (incremental build, then boot test):
@@ -63,7 +70,10 @@ run.sh                  stage runner
 archives/               the complete x86-64 toolchain package, split into
                         5 parts of <=90 MB (GitHub's per-file limit), with
                         SHA256SUMS (per part + joined archive)
-scripts/                one stage per script + fetch-x86_64-root.sh
+scripts/                one stage per script + fetch-x86_64-root.sh,
+                        selftest.sh (toolchain smoke test), check-compile.sh
+.github/workflows/      CI: full pipeline (selftest -> build -> boot test)
+                        on every push, ROM attached as artifact
 docs/                   the package guides (SETUP, PROJECT) — path mapping
                         notes at the top of each file
 modules/                (extracted, gitignored) versioned components:
