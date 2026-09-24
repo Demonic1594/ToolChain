@@ -1,5 +1,12 @@
 # Elite Redux build toolchain + patched source
 
+> **Modular repo note:** this repository reorganizes the original flat
+> package into `modules/` driven by `./run.sh` (see the root `README.md`).
+> The notes below are kept verbatim from the package for reference; where
+> they say `eliteredux-source/` read `modules/06-eliteredux-source/`, and
+> where they say `setup.sh` / `restore-exec-bits.sh` read
+> `scripts/02-env.sh` / `scripts/01-restore-exec-bits.sh`.
+
 Two guides - read the one you need:
 
 - **`README-SETUP.md`** - extracting the (LZMA) archive, restoring exec bits,

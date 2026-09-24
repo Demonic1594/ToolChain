@@ -1,12 +1,28 @@
 # Elite Redux toolchain - SETUP guide
 
+> **Modular repo note:** this guide documents the *original flat package*.
+> In this repository the same content lives under `modules/`, and the old
+> one-shot scripts are replaced by the stage runner:
+>
+> | Original | Here |
+> |---|---|
+> | `setup.sh` (source it) | `source scripts/02-env.sh` (done automatically by `./run.sh`) |
+> | `restore-exec-bits.sh` | `scripts/01-restore-exec-bits.sh` (stage 1) |
+> | manual `make -j1` + `runmake-background.sh` | `scripts/03-build.sh` / `./run.sh --only 4` |
+> | `eliteredux-source/` | `modules/06-eliteredux-source/` |
+> | `gcc-arm-none-eabi/`, `binutils-arm-none-eabi/`, `jdk-21/`, `kotlinc/`, `python3.11-mgba/`, `tools-notes/`, `reference-roms/` | `modules/02-gcc/`, `modules/01-binutils/`, `modules/03-jdk/`, `modules/04-kotlinc/`, `modules/05-python-mgba/`, `modules/07-tools-notes/`, `modules/09-reference-roms/` |
+> | the LZMA zip | `archives/` (split parts; stage 0 rejoins and verifies them) |
+>
+> Start at the repository root `README.md` for the quick start. Everything
+> below (gotchas, toolchain fixes, packaging notes) still applies as written.
+
 Everything about **getting the package running**: extracting it, environment
 setup, building, gotchas, and how the archive itself is packaged.
 For game changes, cheats, learnset edits, bug-fix notes and the emulator test
 harness, see **`README-PROJECT.md`**.
 
-Quick pointer for a new session: extract, `bash -c 'source setup.sh'`, read
-this file, then `cd eliteredux-source && make -j1`.
+Quick pointer for a new session: `./run.sh` (or, manually: stages 0-3, then
+`cd modules/06-eliteredux-source && make -j1`).
 
 ## Extracting (read this first)
 

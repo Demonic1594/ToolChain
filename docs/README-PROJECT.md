@@ -1,5 +1,10 @@
 # Elite Redux - PROJECT notes (game changes, fixes, cheats, testing)
 
+> **Modular repo note:** paths below refer to the original flat package; in
+> this repository the source tree is `modules/06-eliteredux-source/` and the
+> test scripts live in `modules/07-tools-notes/`. All fix descriptions,
+> addresses and harness usage apply unchanged.
+
 Everything about **what has been changed in the game/source** and how to test
 it. For extracting the package, environment setup and building, see
 **`README-SETUP.md`**.
