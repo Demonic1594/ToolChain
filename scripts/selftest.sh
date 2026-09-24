@@ -13,6 +13,10 @@ ok()  { PASS=$((PASS+1)); echo "[selftest] PASS: $1"; }
 bad() { FAIL=$((FAIL+1)); echo "[selftest] FAIL: $1"; }
 
 echo "[selftest] --- environment ---"
+if [ ! -d "$ROOT/modules/02-gcc" ]; then
+  echo "[selftest] FAIL: modules/ not extracted (no modules/02-gcc) - run './run.sh --only extract && ./run.sh --only exec-bits' first"
+  exit 1
+fi
 if (source "$ROOT/scripts/02-env.sh" >/dev/null 2>&1); then ok "02-env.sh sources cleanly"; else bad "02-env.sh fails to source"; fi
 source "$ROOT/scripts/02-env.sh" >/dev/null 2>&1
 
@@ -57,19 +61,29 @@ else
   bad "ARM end-to-end compile/link"; sed 's/^/    /' "$TMP/gcc.err" | head -8
 fi
 
-echo "[selftest] --- JDK ---"
-printf 'public class T{public static void main(String[] a){System.out.println("java-ok");}}\n' > "$TMP/T.java"
-if (cd "$TMP" && javac T.java && [ "$(java -cp . T)" = "java-ok" ]); then ok "javac + java round trip"; else bad "javac/java round trip"; fi
+echo "[selftest] --- JDK (bundled, not the host's) ---"
+JAVAC="$MOD_JDK/bin/javac"; JAVA="$MOD_JDK/bin/java"
+if [ -x "$JAVAC" ] && [ -x "$JAVA" ]; then
+  printf 'public class T{public static void main(String[] a){System.out.println("java-ok");}}\n' > "$TMP/T.java"
+  if (cd "$TMP" && "$JAVAC" T.java && [ "$("$JAVA" -cp . T)" = "java-ok" ]); then ok "bundled javac + java round trip"; else bad "bundled javac/java round trip"; fi
+else
+  bad "bundled JDK missing ($JAVAC)"
+fi
 
 echo "[selftest] --- Kotlin ---"
 if [ "${SELFTEST_FAST:-0}" = "1" ]; then
   echo "[selftest] SKIP: kotlinc (SELFTEST_FAST=1)"
 else
-  printf 'fun main(){ println("kotlin-ok") }\n' > "$TMP/k.kt"
-  if (cd "$TMP" && kotlinc k.kt -include-runtime -d k.jar >/dev/null 2>&1 && [ "$(java -jar k.jar 2>/dev/null)" = "kotlin-ok" ]); then
-    ok "kotlinc compile + run"
+  KOTLINC="$MOD_KOTLINC/bin/kotlinc"
+  if [ -x "$KOTLINC" ]; then
+    printf 'fun main(){ println("kotlin-ok") }\n' > "$TMP/k.kt"
+    if (cd "$TMP" && "$KOTLINC" k.kt -include-runtime -d k.jar >/dev/null 2>&1 && [ "$("$JAVA" -jar k.jar 2>/dev/null)" = "kotlin-ok" ]); then
+      ok "bundled kotlinc compile + run"
+    else
+      bad "kotlinc compile/run (is JAVACMD set? see 02-env.sh)"
+    fi
   else
-    bad "kotlinc compile/run (is JAVACMD set? see 02-env.sh)"
+    bad "bundled kotlinc missing ($KOTLINC)"
   fi
 fi
 
