@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGDIR="$ROOT/logs"
 mkdir -p "$LOGDIR"
 
-STAGES=(00-extract 01-restore-exec-bits 01b-wrap-x86_64 02-env 03-build 04-verify)
+STAGES=(00-extract 01-restore-exec-bits 01b-wrap-x86_64 01c-apply-patches 02-env 03-build 04-verify)
 FROM=0
 ONLY=""
 FORCE=""
@@ -14,9 +14,10 @@ stage_index() {
     0|00-extract|extract)                     echo 0 ;;
     1|01-restore-exec-bits|exec-bits|bits)    echo 1 ;;
     2|01b-wrap-x86_64|wrap)                   echo 2 ;;
-    3|02-env|env)                             echo 3 ;;
-    4|03-build|build)                         echo 4 ;;
-    5|04-verify|verify)                       echo 5 ;;
+    3|01c-apply-patches|patches)              echo 3 ;;
+    4|02-env|env)                             echo 4 ;;
+    5|03-build|build)                         echo 5 ;;
+    6|04-verify|verify)                       echo 6 ;;
     *) return 1 ;;
   esac
 }
@@ -28,8 +29,8 @@ Elite Redux modular build pipeline
 Usage: ./run.sh [options]
 
 Options:
-  --from N    start at stage N: 0-5, or a stage name (00-extract, exec-bits,
-              wrap, env, build, verify), e.g. --from build
+  --from N    start at stage N: 0-6, or a stage name (00-extract, exec-bits,
+              wrap, patches, env, build, verify), e.g. --from build
   --only N    run only stage N (same naming)
   --force     force re-extraction (passes --force to 00-extract; existing
               modules/ are moved to modules/.backup/, not deleted)
@@ -39,9 +40,10 @@ Stages:
   0  00-extract           rejoin archive parts, extract into modules/
   1  01-restore-exec-bits chmod +x ELF/scripts/binaries, touch prebuilt tools
   2  01b-wrap-x86_64      aarch64 hosts only: qemu shim-wrap x86_64 binaries
-  3  02-env               build devkitARM shim, verify toolchain env
-  4  03-build             make -j1 in eliteredux-source (waits, 15-30+ min)
-  5  04-verify            data assertions + mGBA boot test of the built ROM
+  3  01c-apply-patches    copy patches/eliteredux-source/ overlay into modules/
+  4  02-env               build devkitARM shim, verify toolchain env
+  5  03-build             make -j1 in eliteredux-source (waits, 15-30+ min)
+  6  04-verify            data assertions + mGBA boot test of the built ROM
 
 Standalone helpers (not stages):
   scripts/selftest.sh          smoke-test every toolchain component (~1 min)

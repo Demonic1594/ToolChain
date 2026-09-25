@@ -37,8 +37,9 @@ committed in-tree (`preproc.jar`, `codegen.jar`, `codegenkt.jar`,
    **in place** (the preprocessor rewrites large ids to first-free values —
    don't be surprised when a textproto changes under your feet during a
    build).
-4. **generate**: one `er.FileGenerator <type> <output>` per generated file
-   (55 of them: headers, `.inc`, `.s`).
+4. **generate**: one batched `er.BatchGenerator` JVM run producing all 55
+   outputs (headers, `.inc`, `.s`); per-output make targets remain for
+   dependency tracking, and a deleted output forces one full regen.
 
 Jar targets are pinned to **class version 61** (`javac --release 17`,
 `kotlinc -jvm-target 17`): every jar runs on any JVM ≥ 17 — the native
@@ -95,9 +96,12 @@ fail to start under PRoot with "Failed to mark memory page as executable";
 that's upstream JDK 21 W^X behavior, not a broken install, and JDK 17
 works fine).
 
-A pull request currently pending (batching all 57 generators into one JVM
-invocation + deterministic trainer symbol names) reduces the same
-regeneration to ~4 s; it is validated against this tree but not yet merged.
+All 57 generators run in **one batched JVM invocation**
+(`tools/codegen/batch/er/BatchGenerator.java`, applied via the
+`patches/` overlay by stage `01c`): textprotos are parsed once and JVM
+startup is paid once — a full regeneration is ~4 s on a native JVM
+(~13-30 s under qemu), down from ~330 s for the old per-file spawns.
+`CODEGEN_JAVA_FLAGS ?= -Xmx2g` bounds the batch heap.
 
 ## Determinism
 
@@ -105,9 +109,11 @@ regeneration to ~4 s; it is validated against this tree but not yet merged.
 - `trainers.h` historically embedded JVM-instance-dependent symbol names
   (`__sParty_<n>` from `List.hashCode()` over protobuf messages, which mix
   in identity hashes): trainer *data* was always identical, only names and
-  ordering shifted between JVM builds. This is the main historical cause of
-  "fresh builds differ by a few bytes". The pending PR replaces the hash
-  with a spec-stable one, making cross-JVM output byte-identical.
+  ordering shifted between JVM builds. This was the main cause of the old
+  "fresh builds differ by a few bytes" notes. Fixed by the overlay: the
+  party hash is now a spec-stable `String.hashCode()` over the message's
+  TextForm serialization — output is byte-identical across reruns, batch
+  vs per-file runs, and different JVMs (verified native-17 vs qemu-21).
 
 ## Practical recipes
 

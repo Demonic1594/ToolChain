@@ -225,3 +225,23 @@ accurate at the time and the underlying causes still apply.
   25,960 B / ROM ~23.7 MB and a 4-byte-different ROM vs the shipped one
   (embedded timestamps +, as later understood, JVM-dependent trainer
   symbol names — see [README-CODEGEN.md](README-CODEGEN.md)).
+- **Codegen pipeline overhaul** (ships as the `patches/` overlay, applied
+  by stage `01c`): the 57 per-file JVM spawns were replaced by one batched
+  run (`BatchGenerator` — full regeneration ~330 s → ~13-30 s, and ~4 s on
+  a native JVM; per-output make targets kept for dependency tracking, and
+  deleting one output forces a single full batch regen;
+  `CODEGEN_JAVA_FLAGS ?= -Xmx2g` bounds the batch heap; AppCDS/GC tuning
+  measured, no consistent win, not adopted). `TrainerPartyGenerator`'s
+  `__sParty_*` names were built from protobuf `List.hashCode()`, which
+  mixes in per-JVM descriptor identity hashes — the real root cause of the
+  historical "rebuilt ROM differs by 4 bytes" (never just timestamps); now
+  a spec-stable `String.hashCode()` over TextForm output, verified
+  byte-identical across reruns, batch vs per-file, and JVMs. Clean-build
+  fixes in the codegen makefile: `mkdir -p $(dir ...)` before
+  descriptor/dependency outputs, `google/` excluded from `PROTO_SRCS` (it
+  would regenerate `com.google.protobuf.*` into `src/`, shadowing
+  `protobuf-java.jar`), the `protobufkt.jar` classpath typo fixed, and
+  `.textproto.bak` leftovers cleaned. Jar-rebuild gotchas: kotlinc needs
+  `JAVA_OPTS=-Xmx4g`, and a stray *directory* left where the `-d` jar
+  target should be (from a killed run) makes later runs emit loose classes
+  instead of a jar — delete it before rebuilding.
