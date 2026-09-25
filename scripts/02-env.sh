@@ -39,12 +39,39 @@ else
   unset ER_X86_ROOT ER_X86_LIBS
 fi
 
-export PATH="$DEVKITARM/bin:$MOD_JDK/bin:$MOD_KOTLINC/bin:$PATH"
+# aarch64: prefer a NATIVE JDK (>=17) for codegen when one actually runs.
+# The bundled JDK is x86_64 (qemu-wrapped here) and the 57 generator JVM runs
+# dominate the codegen phase (~21s each under qemu vs <1s native). The codegen
+# jars are now pinned to class version 61 (tools/codegen/makefile: javac
+# --release 17 / kotlinc -jvm-target 17), so any JVM >= 17 loads them and the
+# generated output is byte-identical. Some Alpine JDK 21 builds fail to start
+# under PRoot ("Failed to mark memory page as executable") - probing -version's
+# exit code skips those automatically. The C toolchain stays qemu-wrapped.
+NATIVE_JDK=""
+if [ "$ARCH" != "x86_64" ]; then
+  for cand in /usr/lib/jvm/java-17-openjdk /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/*-openjdk; do
+    if [ -x "$cand/bin/java" ] && "$cand/bin/java" -version >/dev/null 2>&1; then
+      NATIVE_JDK="$(cd "$cand" && pwd)"
+      break
+    fi
+  done
+fi
+if [ -n "$NATIVE_JDK" ]; then
+  export PATH="$DEVKITARM/bin:$NATIVE_JDK/bin:$MOD_JDK/bin:$MOD_KOTLINC/bin:$PATH"
+  export JAVACMD="$NATIVE_JDK/bin/java"
+  # Native (musl) consumers fatal on the x86_64 libs in LD_LIBRARY_PATH (no
+  # ELF-class skipping like glibc); /usr/lib first lets them resolve natively,
+  # while glibc/x86_64 loaders just skip the aarch64 entries.
+  export LD_LIBRARY_PATH="/usr/lib:$MOD_MGBA_LIBS:${ER_X86_LIBS:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+else
+  export PATH="$DEVKITARM/bin:$MOD_JDK/bin:$MOD_KOTLINC/bin:$PATH"
+  export JAVACMD="$MOD_JDK/bin/java"  # kotlinc launcher ignores PATH; without this it exits 127 on non-Debian hosts
+  export LD_LIBRARY_PATH="$MOD_MGBA_LIBS:${ER_X86_LIBS:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+export NATIVE_JDK
 export CPATH="$MOD_GCC/include/newlib"
 export CPLUS_INCLUDE_PATH="$MOD_GCC/include/newlib/c++/$CXXVER:$MOD_GCC/include/newlib/c++/$CXXVER/arm-none-eabi/thumb/nofp"
-export LD_LIBRARY_PATH="$MOD_MGBA_LIBS:${ER_X86_LIBS:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export JAVA_OPTS="-Xmx4g"
-export JAVACMD="$MOD_JDK/bin/java"  # kotlinc launcher ignores PATH; without this it exits 127 on non-Debian hosts
 export MOD_PY MOD_SRC MOD_MGBA_LIBS
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
@@ -56,6 +83,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   echo "[02] arm-none-eabi-gcc: $( "$DEVKITARM/bin/arm-none-eabi-gcc" --version 2>/dev/null | head -1 || echo NOT FOUND)"
   echo "[02] as -> $(readlink -f "$DEVKITARM/bin/as" 2>/dev/null)"
   echo "[02] java: $( "$MOD_JDK/bin/java" -version 2>&1 | head -1)"
+  [ -n "$NATIVE_JDK" ] && echo "[02] codegen java (native): $( "$NATIVE_JDK/bin/java" -version 2>&1 | head -1)"
   echo "[02] python3.11 w/ mgba: $MOD_PY/bin/python3.11"
   echo "[02] Environment OK (${ARCH}${ER_X86_ROOT:+, qemu-shimmed})"
 fi
