@@ -30,7 +30,7 @@ protobuf-kotlin.jar:
 	wget -O protobuf-kotlin.jar https://repo1.maven.org/maven2/com/google/protobuf/protobuf-kotlin/4.29.2/protobuf-kotlin-4.29.2.jar -q && exit
 
 preproc.jar: $(PREPROC_SRCS) protobuf-java.jar
-	find src/preproc -name '*.kt' | xargs  kotlinc -cp protobuf-java.jar  -include-runtime -d preproc.jar && exit
+	find src/preproc -name '*.kt' | xargs  kotlinc -cp protobuf-java.jar -jvm-target 17 -include-runtime -d preproc.jar && exit
 
 DEPSETS := $(addprefix timestamp/depsets/,$(PROTO_SRCS))
 PROTODEP := $(addsuffix .protodep.txt,$(addprefix timestamp/protodep/,$(PROTO_SRCS)))
@@ -53,11 +53,11 @@ protos: $(PROTODEP)
 
 codegen.jar: protobuf-java.jar $(JAVA_SRCS) $(PROTODEP)
 	@rm -rf javabuild
-	find src/er -name '*.java' | xargs  javac -cp "protobuf-java.jar:protobuf-kotlin.jar" -d javabuild && exit
+	find src/er -name '*.java' | xargs  javac --release 17 -cp "protobuf-java.jar:protobuf-kotlin.jar" -d javabuild && exit
 	jar cf codegen.jar -C javabuild . && exit
 
 codegenkt.jar: protoc protobuf-java.jar codegen.jar protobuf-kotlin.jar $(KT_SRCS)
-	find src/er -name '*.kt' | xargs  kotlinc -cp "protobuf-java.jar:protobuf-kotlin.jar:codegen.jar" -include-runtime -d codegenkt.jar && exit
+	find src/er -name '*.kt' | xargs  kotlinc -cp "protobuf-java.jar:protobuf-kotlin.jar:codegen.jar" -jvm-target 17 -include-runtime -d codegenkt.jar && exit
 
 define PREPROC_TEXTPROTO
 $1: $2 preproc.jar protobuf-java.jar codegen.jar protoc
@@ -90,7 +90,7 @@ BATCH_CP := codegen.jar:codegenkt.jar:protobuf-java.jar:protobuf-kotlin.jar:batc
 CODEGEN_JAVA_FLAGS ?= -Xmx2g
 
 batch/er/BatchGenerator.class: batch/er/BatchGenerator.java codegen.jar
-	javac -cp "codegen.jar:codegenkt.jar:protobuf-java.jar:protobuf-kotlin.jar" -d batch batch/er/BatchGenerator.java
+	javac --release 17 -cp "codegen.jar:codegenkt.jar:protobuf-java.jar:protobuf-kotlin.jar" -d batch batch/er/BatchGenerator.java
 
 timestamp/generated.stamp: codegen.jar $(TEXTPROTO_SRCS) codegenkt.jar protobuf-java.jar protobuf-kotlin.jar $(TEXTPROTO_PREPROC) batch/er/BatchGenerator.class
 	java $(CODEGEN_JAVA_FLAGS) -cp $(BATCH_CP) er.BatchGenerator $(GEN_PAIRS)
