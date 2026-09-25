@@ -1,14 +1,14 @@
-# EliteRedux — modular build pipeline
+# EliteRedux ToolChain — modular build pipeline
 
 Self-contained build system for the patched **Pokémon Elite Redux** source
 (v2.65.2.3b, `upcoming` branch): toolchain, codegen tooling, emulator test
-harness, and a stage runner that takes you from archive to boot-tested GBA ROM
-with one command.
+harness, and a stage runner that takes you from archive to boot-tested GBA
+ROM with one command.
 
-Runs **natively on x86-64** (any Claude/ChatGPT-style Linux sandbox, a PC,
-CI) and **transparently under qemu emulation on aarch64** (e.g. an Android
-phone in a PRoot/Alpine environment) with the exact same verified GCC 13.2
-toolchain — no compiler-version drift between machines.
+Runs **natively on x86-64** (any Linux sandbox, CI runner, or PC) and
+**transparently under qemu emulation on aarch64** (e.g. an Android phone in
+a PRoot/Alpine environment) with the exact same verified GCC 13.2 toolchain
+— no compiler-version drift between machines.
 
 ## Quick start
 
@@ -17,28 +17,28 @@ toolchain — no compiler-version drift between machines.
 ```
 
 That is all. First run without a local archive downloads ~447 MB from the
-`toolchain-v1` release (SHA256-verified before extraction). The ROM lands in
-`modules/06-eliteredux-source/pokeemerald_modern.gba` and stage 5 boot-tests
-it in the bundled scriptable mGBA (2500 frames).
+`toolchain-v1` release (SHA256-verified before extraction). The ROM lands
+in `modules/06-eliteredux-source/pokeemerald_modern.gba` and stage 5
+boot-tests it in the bundled scriptable mGBA (2500 frames).
 
 One-time prerequisites by host arch:
 
 | Host | Setup |
 |---|---|
-| x86_64 | `apt install build-essential libpng-dev` plus the ffmpeg 6.1 runtime libs (`libavcodec60 libavfilter9 libavformat60 libavutil58 libswresample4 libswscale7 libpostproc57` - names from Ubuntu 24.04/noble; needed by the bundled mGBA harness). Stages 0-3 then run natively. |
-| aarch64 | `apk add qemu-x86_64 make perl zstd` (or distro equivalent), then `./scripts/fetch-x86_64-root.sh` once (needs network, ~250 MB). Stage 2 auto-detects the arch and wraps every x86-64 binary in a qemu shim. |
+| x86_64 | `apt install build-essential libpng-dev` plus the ffmpeg 6.1 runtime libs (`libavcodec60 libavfilter9 libavformat60 libavutil58 libswresample4 libswscale7 libpostproc57` — names from Ubuntu 24.04/noble; needed by the bundled mGBA harness). Stages 0-3 then run natively. |
+| aarch64 | `apk add qemu-x86_64 make perl zstd openjdk17` (or distro equivalent; a native JDK ≥17 makes codegen ~60x faster — see [docs/README-CODEGEN.md](docs/README-CODEGEN.md)), then `./scripts/fetch-x86_64-root.sh` once (needs network, ~250 MB). Stage 2 auto-detects the arch and wraps every x86-64 binary in a qemu shim. |
 
 ## Stages
 
-`./run.sh` executes these in order; each stage is also a standalone script in
-`scripts/` and can be re-run or resumed individually.
+`./run.sh` executes these in order; each stage is also a standalone script
+in `scripts/` and can be re-run or resumed individually.
 
 | # | Stage | What it does |
 |---|---|---|
-| 0 | `00-extract` | Resolve the toolchain archive (local joined zip → local parts → auto-download from the `toolchain-v1` release, always SHA256-verified), extract into `modules/` |
+| 0 | `00-extract` | Resolve the toolchain archive (local zip → local parts → auto-download from the `toolchain-v1` release, always SHA256-verified), extract into `modules/` |
 | 1 | `01-restore-exec-bits` | `chmod +x` every ELF/script/binary, touch prebuilt host tools |
 | 2 | `01b-wrap-x86_64` | *aarch64 only:* rename each x86-64 binary to `*.x86_64` and leave a qemu-launching shim at its original path |
-| 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
+| 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH` (+ native-JDK codegen path on aarch64), verify the toolchain |
 | 4 | `03-build` | Detached (`setsid nohup`) `make -j3` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
 | 5 | `04-verify` | Data-pipeline assertions (generated ability data, ROM size, `.map`), copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
 
@@ -65,6 +65,19 @@ Useful after editing game source (incremental build, then boot test):
 tail -f logs/build.log          # watch progress; grep MAKE_EXIT for completion
 ```
 
+## Build-time expectations
+
+| Scenario | x86_64 | aarch64 (this pipeline) |
+|---|---|---|
+| Full rebuild (fresh `build/`) | 15-30 min | **~20 min** at `-j3` with native-JDK codegen (~30 under phone load) |
+| Codegen phase alone | <30 s | ~2.5 min per-file native (batching pending in PR #1 → ~4 s) |
+| Incremental C edit | seconds-minutes | ~1-2 min for a handful of files |
+
+aarch64 notes: guest `/proc` load reflects the Android host, so a busy phone
+throttles the emulated compiler. `-j3` deliberately leaves headroom; `-j1`
+is the conservative fallback (~70 min full rebuild) and is always safe since
+builds are incremental.
+
 ## Repository layout
 
 ```
@@ -78,8 +91,8 @@ scripts/                one stage per script + fetch-x86_64-root.sh,
                         selftest.sh (toolchain smoke test), check-compile.sh
 .github/workflows/      CI: full pipeline (selftest -> build -> boot test)
                         on every push, ROM attached as artifact
-docs/                   the package guides (SETUP, PROJECT) — path mapping
-                        notes at the top of each file
+docs/                   the package guides: SETUP, CODEGEN, PROJECT — path
+                        mapping notes at the top of each file
 modules/                (extracted, gitignored) versioned components:
   01-binutils           ARM assembler/linker (matches the gcc)
   02-gcc                arm-none-eabi GCC 13.2 (the "modern" build — required;
@@ -96,6 +109,11 @@ modules/                (extracted, gitignored) versioned components:
 committed. Everything the toolchain produces (ROM, `.elf`, `.map`, `build/`
 object cache) lives under `modules/06-eliteredux-source/`.
 
+**Source changes travel on the `eliteredux-source` branch**: `modules/` is
+gitignored, so modified/new game-source files are force-tracked there at
+their real paths. Overlay onto a fresh extraction with
+`git checkout eliteredux-source -- modules/06-eliteredux-source/`.
+
 ## How the aarch64 (qemu) mode works
 
 The bundled toolchain is x86-64 ELF. On an aarch64 host stage 2:
@@ -111,14 +129,17 @@ PATH lookup, GCC's internal `cc1`/`collect2` execs, even this Makefile's
 `$(shell PATH=<broken> gcc --print-prog-name=cc1)` trick (the shims are
 deliberately PATH-independent). `scripts/fetch-x86_64-root.sh` builds the
 sysroot: Debian trixie base with dependency closure, plus the Ubuntu noble
-ffmpeg 6.1 libraries the mGBA harness needs, resolved iteratively until
-`import mgba` succeeds.
+ffmpeg 6.1 libraries the mGBA harness needs.
+
+**Codegen does not pay the qemu tax**: `scripts/02-env.sh` prefers a native
+JDK (≥17) when one actually starts, and the codegen jars are class-version
+61 so any JVM ≥ 17 runs them (generators: ~21 s each under qemu vs <1 s
+native). Details, limits, and failure modes: [docs/README-CODEGEN.md](docs/README-CODEGEN.md).
 
 Verified end-to-end on aarch64/PRoot: full build `MAKE_EXIT=0` in ~20 min
-with `make -j3` + native-JDK codegen (codegenerators run on the host JVM;
-jars are class-version 61). Without a usable native JDK the codegen phase
-alone adds ~15-20 min of qemu-executed JVM time (jars then load on the
-bundled x86_64 JDK 21). Older all-qemu `-j1` builds took ~70 min.
+with `make -j3` + native-JDK codegen. Without a usable native JDK the
+codegen phase alone adds ~15-20 min of qemu-executed JVM time. Older
+all-qemu `-j1` builds took ~70 min.
 
 ## Editing and building elsewhere
 
@@ -127,41 +148,42 @@ Two supported workflows:
 - **Edit + build locally** — change files under `modules/06-eliteredux-source/`,
   then `./run.sh --from 4`.
 - **Edit here, build remotely** — the repo is self-describing: push your
-  commits, then on any x86-64 Linux box (Claude/ChatGPT sandbox, CI) clone,
+  commits, then on any x86-64 Linux box (sandbox, CI, a PC) clone,
   `./run.sh`, done. Stage 2 is a no-op there; everything runs natively.
   Or skip the box entirely: CI (`.github/workflows/`) runs the full pipeline
   on every push and attaches the ROM as an artifact.
-
-To move local source edits into the repo (they are gitignored via `modules/`),
-copy the changed files out of `modules/06-eliteredux-source/` and commit them
-wherever you keep your source drop, or re-package the module.
 
 ## Integrity and verification
 
 - `archives/SHA256SUMS` covers every part and the joined archive; stage 0
   refuses to extract on mismatch.
 - Stage 5 is a real boot test (mGBA runs 2500 frames; a crash fails the
-  pipeline). It is not a gameplay playtest — see `docs/README-PROJECT.md`
-  for what remains untested.
+  pipeline). It is not a gameplay playtest — see `docs/project/` for what
+  remains untested.
 
 ## Known quirks
 
-- On aarch64, host processes that inherit the exported `LD_LIBRARY_PATH` may
-  print musl `Error relocating ... libz.so.1` noise — harmless (they fall
-  back to native libs) and never affected the build result.
+- On aarch64, host processes that inherit the exported `LD_LIBRARY_PATH`
+  may print musl `Error relocating ... libz.so.1` noise — harmless for the
+  qemu consumers (they fall back correctly) and neutralized for native
+  consumers by the `/usr/lib` prefix that `02-env.sh` adds in native-JDK
+  mode.
 - `flips-linux` links GTK 3, which the sysroot intentionally omits; it is not
   used by the build. Apply `.bps` patches with flips on a desktop if needed.
-- Fresh builds differ from the shipped reference ROM by a few bytes
-  (embedded timestamps), which matches the upstream package's own notes.
+- Fresh builds differ from the shipped reference ROM by a few bytes — a mix
+  of embedded timestamps and (historically) JVM-dependent trainer symbol
+  names; the codegen guide documents the current determinism state.
 
 ## Documentation
 
 - `docs/README.md` — documentation index + reading order
-- `docs/README-SETUP.md` — deep dive: extraction format, toolchain fixes,
-  build gotchas (all still true), packaging history
+- `docs/README-SETUP.md` — deep dive: extraction format, environment,
+  toolchain fixes, every build gotcha that actually happened, packaging notes
+- `docs/README-CODEGEN.md` — the textproto → C pipeline: edit rules, string
+  length limits, jar targets, failure modes and recovery
 - `docs/project/` — the game-side docs, split by topic:
-  `fixes.md` (source fixes 3-33 with verification status),
-  `game-changes.md` (Shedinja, custom abilities, learnsets),
+  `fixes.md` (source fixes 3-93 with verification status),
+  `game-changes.md` (Shedinja, SabreVoir, custom abilities, learnsets),
   `cheats.md` (emulator-verified cheat codes),
   `testing.md` (mGBA harness usage, struct-offset derivation),
   `open-findings.md` (open items + playtest priorities)
