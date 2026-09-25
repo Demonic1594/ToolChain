@@ -4,6 +4,17 @@
 > [Back to project index](README.md)
 
 - `CalcCritChanceStage` still reads `gBattleMoves[move]` / hold-effect data without bounds checks on `move`; fine for valid ids.
+- **Safari zone catch rate is 0 across the board (follow-up to fix 34)** —
+  `battle_main.c` derives `safariCatchFactor` from
+  `gBaseStats[].catchRate`, which the codegen never emits (no proto
+  field exists; 0 for every species). With fix 34 restoring the vanilla
+  `odds > 255` formula, regular balls still catch via ball
+  multipliers/additions, but Safari Balls (multiplier path keyed off
+  the factor) are effectively dead. Same data gap also zeroes
+  `expYield` (battles give the clamped flat 1 exp - intended candy
+  progression), `growthRate` (all species MEDIUM_FAST), wild held
+  items, and EV yields. Revisit if any of those need real values:
+  proto schema + `BaseStatsGenerator.kt` + codegen jar rebuild.
 
 Closed items (kept for the record):
 
