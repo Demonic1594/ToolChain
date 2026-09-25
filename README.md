@@ -114,10 +114,11 @@ sysroot: Debian trixie base with dependency closure, plus the Ubuntu noble
 ffmpeg 6.1 libraries the mGBA harness needs, resolved iteratively until
 `import mgba` succeeds.
 
-Verified end-to-end on aarch64/PRoot: full build `MAKE_EXIT=0` in ~40-45 min
-with the default `make -j3` (measured 37.5 min at `-j4`; ~15-20 min of that is
-the serial codegen phase, which cores don't help — vs 15-30 min native) and a
-clean mGBA boot test. Older `-j1` full builds took ~70 min.
+Verified end-to-end on aarch64/PRoot: full build `MAKE_EXIT=0` in ~20 min
+with `make -j3` + native-JDK codegen (codegenerators run on the host JVM;
+jars are class-version 61). Without a usable native JDK the codegen phase
+alone adds ~15-20 min of qemu-executed JVM time (jars then load on the
+bundled x86_64 JDK 21). Older all-qemu `-j1` builds took ~70 min.
 
 ## Editing and building elsewhere
 
