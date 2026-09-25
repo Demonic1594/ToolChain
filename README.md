@@ -39,7 +39,7 @@ One-time prerequisites by host arch:
 | 1 | `01-restore-exec-bits` | `chmod +x` every ELF/script/binary, touch prebuilt host tools |
 | 2 | `01b-wrap-x86_64` | *aarch64 only:* rename each x86-64 binary to `*.x86_64` and leave a qemu-launching shim at its original path |
 | 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
-| 4 | `03-build` | Detached (`setsid nohup`) `make -j1` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
+| 4 | `03-build` | Detached (`setsid nohup`) `make -j3` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
 | 5 | `04-verify` | Data-pipeline assertions (generated ability data, ROM size, `.map`), copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
 
 Runner options:
