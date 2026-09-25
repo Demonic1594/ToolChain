@@ -1,4 +1,4 @@
-# Source-code fixes (3-33)
+# Source-code fixes (3-93)
 
 > Paths are relative to `modules/06-eliteredux-source/` unless they start with `modules/`.
 > [Back to project index](README.md)
@@ -10,6 +10,7 @@
 | Follow-up bug-hunt | 10-27 | manual + warning sweep | compiled per file, linked, booted |
 | Warning sweep | 28-33 | `-Wlogical-op` etc. | compiled per file, linked, booted |
 | v2.65.2.3b re-verification | all | delta re-apply | linked (`MAKE_EXIT=0`) + boot-tested; **not playtested** |
+| Systematic review pass | 34-93 | 5 parallel deep reviews (battle core/script/util/AI/abilities + mon-data subsystem), every finding re-verified by hand against surrounding code and upstream pokeemerald-expansion 1.9.2 | compiled per file (`-Werror`); see verification note at the end |
 
 ### Fixes already present when the package was first assembled
 
@@ -282,3 +283,321 @@ Nightmare, Training Band, form-change abilities, or the AI switch-in change beha
 > **never actually been build-verified against this source tree before now** -
 > more was broken than the earlier "has not been re-verified" caveat implied.
 > Playtesting in a real battle is still outstanding.
+
+### Fixes added in the systematic review pass (34-93; compile-checked per file with `-Werror`)
+
+A full-tree review of the battle engine, the AI, `abilities.cc`, and the
+mon-data subsystem (16 files touched). Every finding below was verified
+against its surrounding code (and, where relevant, pokeemerald-expansion
+1.9.2 / the ability `textproto` descriptions) before fixing. Grouped by
+severity, then file.
+
+#### Gameplay-breaking / memory corruption
+
+34. **Every Poké Ball was an instant guaranteed capture**
+    (`Cmd_handleballthrow`, `battle_script_commands.c`) — the caught/uncought
+    branch read `if (TRUE)`, making the entire shake/fail path (including
+    Critical Capture and the Master Ball shortcut inside it) unreachable dead
+    code. Restored the upstream condition `if (odds > 255)` (vanilla formula
+    uses `/10` ball multipliers here, where the threshold is 255; Master Ball
+    is still guaranteed via `shakes = maxShakes` in the else branch). Also
+    hardened the re-enabled shake formula against `odds == 0` (catchRate-0
+    species): a 0-odds ball now deterministically shows 0 shakes instead of
+    relying on divide-by-zero behavior.
+35. **Switch-in queue compaction corrupted memory** (`SwitchInClearSetData`,
+    `battle_main.c`) — the "remove queued out-of-turn attacks" loop had the
+    "remove queued switches" loop *nested inside it*, reusing the same index
+    `i` and never resetting `gQueuedSwitchCount` before compacting. Effects:
+    the outer attack loop aborted early (queued attacks of the switched-in
+    battler survived), and the switch compaction *appended* duplicated entries
+    past the old count — writing past `gQueuedSwitchData[4]` into
+    `gQueuedSwitchCount`/`gCurrentActionFuncId`/`gBattleMons[0]` (EWRAM
+    adjacency from the `.map`). Also, when the attack queue was empty the
+    switch queue was never filtered at all. Now two sequential sibling loops.
+36. **Nine abilities indexed side arrays with a battler id** (`abilities.cc`)
+    — `gSideStatuses[...]`/`gSideTimers[...]` are `[2]` arrays indexed by
+    *side* (`battler & 1`), but `BATTLE_OPPOSITE(battler)` = `battler ^ 1`
+    yields a *battler* id: correct only for battlers 0/1, and an **OOB write**
+    (Hot Coals, 8875) / OOB reads (the rest) for the right-flank battlers 2/3
+    of doubles. Fixed to `GetOppositeSide(battler)` (`= (battler & 1) ^ 1`) in:
+    **Hot Coals** (write), **Spider Lair** + **Spider Lair Upgrade**,
+    **Scrapyard** + **Drop Blocks** (spikes cap), **Toxic Debris** (toxic
+    spikes cap), **Loose Rocks** + **Loose Thorns** (stealth rock), and
+    **Overcast** (read `gSideStatuses[battler]` directly while setting via
+    `GetBattlerSide` three lines below — check and set could disagree).
+37. **`CanTargetFaintAi` indexed `simulatedDmg` by move id**
+    (`battle_ai_util.c`) — `simulatedDmg[def][atk][moves[i]]` used the move
+    *id* (up to ~900) as the third index of a `[4][4][4]` array; any foe move
+    id ≥ 4 read far out of bounds, corrupting the "can the foe KO me" check
+    that feeds the AI_TryToFaint-family scoring every AI turn. Now indexes by
+    slot `i` (as the sibling `CanAIFaintTarget` correctly does).
+38. **`CanTargetFaintAiWithMod` had attacker/defender swapped**
+    (same file) — it read the AI's *own* damage output and compared it to the
+    AI's own HP while filtering by the AI's own move limitations; with the AI
+    at low HP it concluded "foe can KO me" exactly when its own attack
+    outdamaged its own HP (heal-refusal). Indices and limitations fixed to the
+    defender's.
+
+#### Wrong results in normal play
+
+39. **Unnerve only detected from one opponent slot**
+    (`IsUnnerveAbilityOnOpposingSide`, `battle_util.c`) — after
+    `opponent = BATTLE_PARTNER(opponent)` the second ability check still
+    tested `BATTLE_OPPOSITE(battlerId)`, i.e. the *first* opponent again
+    (including a fainted one). Partner's Unnerve never suppressed berries.
+40. **Instruct read `gBattleMoves[0xFFFF]` before its own guard**
+    (`VARIOUS_TRY_INSTRUCT`, `battle_script_commands.c`) — the ban-list loop
+    indexed `gBattleMoves[gLastMoves[gActiveBattler]].effect` *before* the
+    `== 0xFFFF` check on the next line; a failed/none move read ~1.3 MB past
+    the table. Guard moved before the loop (same pattern as the Copycat
+    sibling above it).
+41. **Fury Cutter never powered up** (`Cmd_handlefurycutter`) — the
+    "don't increment on Parental Bond second hit" exception was AND-ed into
+    the *increment* condition, so a normal mon (both PB fields 0) never
+    incremented at all: Fury Cutter stayed at 40 base power forever. Now
+    increments unless a PB continuation hit is in progress (matches upstream
+    1.9.2's `!= PARENTAL_BOND_2ND_HIT`).
+42. **`sameMoveTurns` never accrued** (`Cmd_ppreduce`) — same inverted
+    exception shape: the increment required an active PB continuation, which
+    can never be true at PP-deduction time (it runs once per move, on the
+    first hit). The Metronome-item boost, the ability multiplier in
+    `abilities.cc` and `script_conditions.cc` were all permanently dead.
+    Exception removed (ppreduce runs once per turn; no double-increment risk).
+43. **Psycho Shift's poison branch used the paralysis immunity check**
+    (`VARIOUS_PSYCHO_SHIFT`) — copy-paste; poison could be shifted onto
+    Poison/Steel types and Electric types wrongly blocked it. Now
+    `CanBePoisoned(gBattlerAttacker, gBattlerTarget, gCurrentMove)`.
+44. **Terrain Seed hold-effect lookup keyed by battler id**
+    (`VARIOUS_TERRAIN_SEED`) — `ItemId_GetSecondaryId(gActiveBattler)` passed
+    a battler id (0-3) to an item-id-keyed lookup; the seed-eaten-by-bug path
+    could never match. Now passes the held `item` (which was already read
+    into a local one line above).
+45. **Future Sight side flag desynced on swap moves** (`VARIOUS_SWAP_WITH`)
+    — both XORs toggled `gActiveBattler`'s side (the second undid the first)
+    while the per-battler counter/move/power/attacker data *was* swapped
+    below; the side flag then never matched the swapped state. Second XOR now
+    toggles the attacker's side.
+46. **Swallow restored SpDef with the Def stockpile count**
+    (`Cmd_stockpiletohpheal`) — copy-paste from the Def line; SpDef could be
+    lowered by the wrong amount and `stockpileSpDef` never consumed. Now uses
+    `stockpileSpDef` (matches `TryUseStockpile`/`Cmd_stockpiletobasedamage`).
+47. **Lansat-style crit berry only eaten when useless**
+    (`ItemBattleEffects`, `HOLD_EFFECT_CRITICAL_UP`) — the end-turn case
+    tested `!(critBoost < 3)`, i.e. eat only at cap, where the computed
+    increase is zero stages. Inverted to `critBoost < 3` (matches its own
+    switch-in twin).
+48. **Sky Drop victim never released early when the user's move is
+    cancelled** (`CancelMultiTurnMoves`, `battle_util.c`) — the filter tested
+    `gVolatileStructs[battler].skyDroppedBy == battler` (self-dropped:
+    impossible, the setter requires target ≠ user), so `shouldClearSkyDrop`
+    was never set and the `ENDTURN_SKY_DROP` release path was dead: flinching/
+    falling asleep mid-Sky-Drop left the target semi-invulnerable in the air.
+    Also made that end-turn consumer clear `STATUS3_ON_AIR` like the two
+    battle_main.c release paths do.
+49. **Wrap "broke free" cleared `wrapAbility` on a stale battler**
+    (`ENDTURN_WRAP`) — used `gEffectBattler` (stale global) instead of
+    `gActiveBattler` (the freed mon, used by every other line in the block):
+    an unrelated battler's wrap bookkeeping was zeroed and the freed mon kept
+    a stale `wrapAbility` for the next wrap announcement.
+50. **HP-based form changes remapped ability state for the wrong battler**
+    (`ShouldChangeFormHpBased`, `battle_util.c`, 7 sites) — species was
+    changed on the `battler` parameter but
+    `UpdateAbilityStateIndicesForNewSpecies(gActiveBattler, ...)` read the
+    *acting* battler's personality/level and clobbered the wrong battler's
+    tracking. Called from defender-side ability hooks where `gActiveBattler`
+    is typically the attacker. All sites now pass `battler`.
+51. **Poison monotype-champion end-turn effect only fired for battler 0**
+    (`ENDTURN_TOXIC_WASTE_DAMAGE`) — `gActiveBattler == B_SIDE_PLAYER`
+    compared a battler id to a side constant (0). The player's right-slot mon
+    (battler 2) never got the Toxic Spill damage. Now
+    `GET_BATTLER_SIDE(gActiveBattler) == B_SIDE_PLAYER` (as the Rock and Bug
+    champion cases in the same function already did).
+52. **`ENDTURN_COILED_UP`/`CUTTHROAT` indexed `gBattleMoves` with an
+    unguarded `gLastMoves`** (`battle_util.c`) — `gLastMoves[battler]` is set
+    to `0xFFFF` when a move records without `HITMARKER_OBEYS`; both checks now
+    skip when the last move is 0/0xFFFF instead of reading ~1.3 MB past the
+    move table.
+53. **Illusion detection seeded the ability randomizer with the species**
+    (`SetIllusionMon`, `battle_util.c`) — `personality` was read with
+    `MON_DATA_SPECIES` (copy-paste). In Ability-Randomizer mode the Illusion
+    check computed a different ability than the mon actually had (false
+    positives and negatives). Now `MON_DATA_PERSONALITY`.
+54. **Magic Room lost a turn of duration on the cast turn**
+    (`ENDTURN_MAGIC_ROOM`) — the only room/terrain end-turn case missing the
+    `!gFieldTimers.started.magicRoom` guard its siblings have (the flag *is*
+    set on creation and cleared by `ZERO(gFieldTimers.started)` each turn).
+55. **Fling base power read the flung item from the wrong battler**
+    (`CalcMoveBasePower`, `EFFECT_FLING`) — used `gTurnStructs[gActiveBattler]`
+    where the rest of the function uses the `battlerAtk` parameter; the AI /
+    damage preview computed Fling power from the wrong mon's item.
+56. **Heal Bell checked Soundproof with a party index**
+    (`Cmd_healpartystatus`) — `IsSoundproof(i)` was called with the party
+    slot (0-5) where the function expects a *battler* id: slots 4-5 read
+    past `gBattleMons[4]`, and slots 0-3 checked the wrong battler's
+    abilities whenever party index ≠ battler id. Field mons now check their
+    actual battler (`gBattlerAttacker` / partner, doubles-gated); bench mons
+    keep the species/innate lookup path.
+57. **Leech-Seed-on-hit seeded exactly the immune targets**
+    (`SetMoveEffect`, `MOVE_EFFECT_LEECH_SEED`, used by Fertile Fangs /
+    Bramble Blast) — the gate *required* the target to be Grass (the type
+    immune to Leech Seed) unless the attacker had Mycelium Might. Now mirrors
+    `Cmd_setseeded`: fails on Grass, applies otherwise.
+58. **Switch-in item effects ran for the wrong battlers / read OOB on the
+    last slot** (`TryDoEventsBeforeFirstTurn`, `battle_main.c`) —
+    `if (!IsBattlerAlive(counter++)) continue;` then indexed
+    `gBattlerByTurnOrder[counter]` with the *already-incremented* counter:
+    items were processed for the next battler in speed order (Amulet Coin
+    prize doubling / White Herb / instant berries silently misapplied at
+    battle start), and the final iteration read `gBattlerByTurnOrder[4]`,
+    one past the array. Now mirrors the sibling abilities loop.
+59. **AI spikes-danger check was inverted** (`CalculateHazardDamage`,
+    `battle_ai_switch_items.c`) — `spikesAmount > 0 && !IsBattlerGrounded`:
+    the AI computed spikes damage for *airborne* mons and none for grounded
+    ones, switching doomed grounded mons into spikes and refusing to switch
+    fliers. Now `&& IsBattlerGrounded(...)`.
+60. **Candy Box granted one level less than the menu showed**
+    (`PokemonUseItemEffects` + `ShowLevelUpSelectWindow`) — cursor k displayed
+    "Lv {level+k}" but the effect applied `level + k - 1` (the first numeric
+    option granted zero levels). Fixed to `levelUp = k`, and the party menu
+    now offers 6 entries (Level Cap + 5 levels) matching the PC's
+    `MAX_LEVEL_UP_OPTIONS = 6` and the `CANDY_BOX_LEVELS = 5` clamp — the 7th
+    entry previously displayed a level the clamp would silently cap.
+61. **Form Change menu badge gate was always open** (`party_menu.c`) —
+    `VarGet(FLAG_BADGE02_GET)` passes a *flag* id to a *var* getter, which
+    returns the id itself (always nonzero): the Badge-2 requirement never
+    gated anything. Now `FlagGet(FLAG_BADGE02_GET)`. Same block's loop bound
+    `i < gFormChangeTable[species][i].method` compared the counter to the
+    method *value* — changed to the standard `.method;` terminator idiom used
+    everywhere else.
+62. **PC mon options menu could drop Cancel** (`SetMenuText`,
+    `pokemon_storage_system.c`) — MOVE_MONS mode can qualify for 8 entries
+    (Move/Summary/Withdraw/Level Up/Evolve/Mark/Release/Cancel) into the
+    7-slot menu (the layout `15 - 2*count` caps at 7), and the overflow guard
+    silently dropped the last item: Cancel. Now Cancel replaces the last slot
+    instead of being lost (B-button cancel was always available). Trade-off:
+    Release is the entry dropped in that 8-entry case.
+63. **Daycare nature inheritance read `daycare->mons[-1]`**
+    (`GetParentToInheritNature`, `daycare.c`) — with no Everstone held (the
+    common case) `parent == -1` and the trailing re-check dereferenced
+    `mons[-1]` ~100 bytes before the array. Benign on GBA (result invariant)
+    but a real OOB read on every egg trigger; now guarded with `parent < 0`.
+
+#### AI evaluation bugs (live old AI)
+
+64. **`AI_MoveMakesContact` inverted Long Reach** (`battle_ai_util.c`) —
+    returned "makes contact" only for Long Reach holders (the ability that
+    *prevents* contact). Rocky Helmet danger scoring was exactly backwards.
+65. **Ally-absorb scoring inverted** (`AI_HPAware`, `battle_ai_main.c`) —
+    the "beneficial hit on my partner" branch required the partner to *lack*
+    Volt Absorb / Earth Eater / (Dry Skin *and* Water Absorb), encouraging
+    the AI to blast its own injured partner and skipping the one good case.
+    Affirmative tests now; water is Dry Skin *or* Water Absorb.
+66. **Snore / Sleep Talk penalized when usable** (`AI_CheckBadMove`) —
+    `!asleep || !comatose` is true for nearly every mon (asleep XOR comatose);
+    now `!asleep && !comatose` per the comment.
+67. **Teeter Dance partner-ability checks inverted** (same function) — the
+    target's Own Tempo/Discipline clauses tested positive but the partner's
+    were negated, so in doubles the "neither foe can be confused" gate
+    required the partner to *lack* immunity. Partner clauses now match the
+    target's, wrapped in an alive-guard so singles behavior (decided by the
+    sole foe) is unchanged.
+68. **Recycle berry scoring divided by a zero hold-effect param**
+    (`AI_CheckViability`) — Lum/Chesto/Persim have `holdEffectParam == 0`;
+    `maxHP / 0` executed on the AI's turn for Ripen mons. Param fetched once,
+    zero-guarded.
+69. **AI query advanced the real toxic counter** (`GetPoisonDamage`,
+    `battle_ai_util.c`) — the "estimate end-turn poison damage" helper did
+    `status1 += STATUS1_TOXIC_TURN(1)` on the *real* battler state (including
+    the player's mon), permanently inflating toxic damage after a few AI
+    turns. Now computes the next tick locally.
+70. **`IsBattlerTrapped` read the acting battler's Commanded/fear state**
+    (`battle_ai_util.c`) — two of the clauses used `gActiveBattler` instead of
+    the `battler` parameter; during AI thinking every foe inherited the AI's
+    own mon's trap state.
+71. **u8 truncation of u16 stats in AI scoring** — Power Split / Guard Split
+    (`battle_ai_main.c`) and `IncreaseParalyzeScore` speeds
+    (`battle_ai_util.c`) stuffed 300+ stats into `u8` locals (300→44,
+    260→4), making split-or-not and will-paralysis-flip-speed decisions
+    garbage for level-100 mons. Locals widened to `u16`.
+72. **Seismic Toss / level-damage AI read `gBattlerAttacker`'s level**
+    (`battle_ai_attack.c`, dormant new AI) — now the `battlerAtk` parameter.
+
+#### Latent / dormant code fixes
+
+73. **`B_TXT_BUFF4` expanded into `gStringVar3` but printed `gStringVar4`**
+    (`battle_message.c`) — copy-paste; currently masked because the only
+    buff4 producers write plain digits, but any future placeholder buff4
+    would print stale memory.
+74. **`{B_ACTIVE_NAME2}` read the species from `gPlayerParty` in the
+    opponent branch** (`battle_message.c`) — copy-paste; a non-nicknamed
+    opponent would be named after the player's party member at the same
+    index. (String currently unused, but fixed for when it returns.)
+75. **Battle Palace target flags used the player's move cursor**
+    (`battle_gfx_sfx_util.c`) — `moveInfo->moves[gMoveSelectionCursor[...]]`
+    instead of the AI-chosen `moves[chosenMoveId]` (vanilla behavior).
+76. **`TRAINER_OLDPLAYER` debug party could roll `SPECIES_NONE`**
+    (`battle_main.c`) — `Random() % 500` has a 1/500 chance of 0; now
+    `1 + Random() % 499`.
+77. **`CreateMonWithEVSpread` divided by zero for an empty EV spread**
+    (`pokemon.c`, 2 sites) — `statCount` is 0 when `evSpread == 0`; guarded
+    (no current caller passes 0, defensive).
+78. **`GetMoveRelearnerMoves(..., disableLearned = FALSE)` collected
+    nothing** (`pokemon.c`) — `j` stayed 0 so the "not already known" gate
+    never passed; `j = MAX_MON_MOVES` when learning isn't disabled. (Only
+    caller passes TRUE today.)
+79. **`HoennToNationalOrder` off-by-one** (`pokemon.c`) — allowed
+    `hoennNum == ARRAY_COUNT(...)`, reading one entry past the table
+    (vanilla-identical quirk, fixed anyway).
+80. **Moody's stat RNG could draw `STAT_HP`** (`abilities.cc`) —
+    `(Random() % NUM_STATS - STAT_ATK) + STAT_ATK` parses as
+    `Random() % NUM_STATS` (the ± cancels); rejected by the validity masks,
+    so only the retry distribution was skewed. Parenthesized correctly.
+81. **Beads of Ruin lowered Def instead of SpDef** (`abilities.cc`) — the
+    impl was a copy of Sword of Ruin (`STAT_DEF` in both `.onStat` and
+    `.ruinStat`); the ability's own description says Special Defense. Now
+    `STAT_SPDEF`.
+82. **Archmage's Grass branch set Misty terrain** (`abilities.cc`) —
+    copy-paste from the Fairy branch; the description says Grass sets
+    *grassy* terrain. Now `STATUS_FIELD_GRASSY_TERRAIN`.
+83. **Let's Roll clobbered the whole `status2` word** (`abilities.cc`) —
+    `status2 = STATUS2_DEFENSE_CURL` (assignment) wiped every other volatile
+    bookkeeping bit on entry; now `|=`.
+84. **Download / Spyware fallback liveness tested the wrong battler**
+    (`abilities.cc`) — `if (!IsBattlerAlive(battler))` tested the ability
+    *owner* (always alive on entry) where `gBattlerTarget` (just selected the
+    line above) was meant; in doubles with the opposite slot fainted both
+    abilities read a fainted mon's stats. Matches the Forewarn pattern.
+85. **`PredictFoesMoveType` used `defType1` twice** (`battle_ai_switch_items.c`,
+    3 sites) — the documented open item: effectiveness was computed as
+    atk×defType1². Still dead code (sole caller commented out), but now fixed
+    for whenever it is revived.
+86. **Dormant new-AI fixes** (`battle_ai_new.c` / `_util.c` / `_attack.c`)
+    — `GetAiDecision` computed every battler's move limitations from the
+    function's `battler` argument instead of the loop's `battlerAtk`;
+    `BelowHalfHp` compared `hp <= maxHP` (missing `/ 2`); `CheckSingleHitKo`
+    discarded `ApplyModifier`'s return value (crit/×2 multiplier never
+    applied); `sCritChance[critChance - 1]` was unbounded for the 3-bit
+    field (clamped to the guaranteed-crit entry); Seismic Toss/level damage
+    used `gBattlerAttacker`'s level. None reachable today (the new AI has no
+    callers), fixed so wiring it up later starts from a clean base.
+
+**Deliberately NOT changed** (verified design, do not "fix"): ER's Gluttony
+intentionally includes the Cheek Pouch-style 1/3-max-HP heal on berry use and
+ER's Cheek Pouch ability is intentionally "no effect" (see their
+`AbilityList.textproto` descriptions); Absolute Guard still blocks status
+moves (fix 16); the `SetActionsAndBattlersTurnOrder` pre-sort is inert
+(`except` excludes every battler) but harmless because
+`RecalculateMoveOrder` re-sorts after every action — left alone as a hazard
+note; the link-revive loop `battler += 2` in `HandleEndTurn_BattleWon` is
+correct because player-side battlers are ids 0/2 on every console.
+
+**Verification:** every modified file passes a real per-file compile
+(Makefile flags, `-Werror`) via `modules/07-tools-notes/check-compile.sh` /
+`scripts/check-compile.sh`: battle_script_commands.c, battle_util.c,
+battle_main.c, battle_message.c, battle_gfx_sfx_util.c, abilities.cc, all
+five live-AI files, the three dormant-AI files, pokemon.c, party_menu.c,
+pokemon_storage_system.c, daycare.c. Full `make -j1` + mGBA boot test: see
+the build-status table in [README.md](README.md) for the latest result.
+**None of 34-93 have been playtested in a real battle** — same caveat as
+fixes 5-33; the playtest priority list in
+[open-findings.md](open-findings.md) was extended accordingly.
