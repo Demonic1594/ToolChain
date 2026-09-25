@@ -214320,7 +214320,7 @@ species {
   visuals {
     icon {
       path: "sabrevoir/icon"
-      palette: 1
+      palette: 7
     }
     front {
       path: "sabrevoir/anim_front"

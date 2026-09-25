@@ -1,5 +1,6 @@
 #include "global.h"
 #include "malloc.h"
+#include "sabrevoir_8bpp.h"
 #include "apprentice.h"
 #include "battle.h"
 #include "battle_anim.h"
@@ -1327,6 +1328,11 @@ void SetMultiuseSpriteTemplateToPokemon(u16 speciesTag, u8 battlerPosition) {
         gMultiuseSpriteTemplate = gBattlerSpriteTemplates[battlerPosition];
 
     gMultiuseSpriteTemplate.paletteTag = speciesTag;
+    if (battlerPosition == B_POSITION_OPPONENT_LEFT || battlerPosition == B_POSITION_OPPONENT_RIGHT) {
+        u16 displaySpecies = (speciesTag > SPECIES_SHINY_TAG) ? speciesTag - SPECIES_SHINY_TAG : speciesTag;
+        if (SpeciesHas8bppSprites(displaySpecies))
+            gMultiuseSpriteTemplate.oam = &gOamData_BattleSpriteOpponentSide8bpp;
+    }
     if (battlerPosition == B_POSITION_PLAYER_LEFT || battlerPosition == B_POSITION_PLAYER_RIGHT)
         gMultiuseSpriteTemplate.anims = gAnims_MonPic;
     else if (speciesTag > SPECIES_SHINY_TAG)

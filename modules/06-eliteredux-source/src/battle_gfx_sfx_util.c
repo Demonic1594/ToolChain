@@ -6,6 +6,7 @@
 #include "constants/battle_anim.h"
 #include "battle_interface.h"
 #include "main.h"
+#include "sabrevoir_8bpp.h"
 #include "dma3.h"
 #include "malloc.h"
 #include "graphics.h"
@@ -511,10 +512,26 @@ static void BattleLoadMonSpriteGfx(struct Pokemon *mon, u32 battlerId, bool32 op
     }
 
     position = GetBattlerPosition(battlerId);
-    if (opponent) {
-        HandleLoadSpecialPokePic(&gMonFrontPicTable[species], gMonSpritesGfxPtr->sprites.ptr[position], species, currentPersonality);
+    if (opponent && SpeciesHas8bppSprites(species)) {
+        // 8bpp detailed front: copy raw tiles and point all four frame slots at
+        // them with doubled sizes so tile alloc and VRAM copies handle 4096 bytes.
+        u32 j;
+        CpuCopy32(GetSpecies8bppFrontPic(species), gMonSpritesGfxPtr->sprites.ptr[position], MON_PIC_SIZE * 2);
+        for (j = 0; j < 4; j++) {
+            gMonSpritesGfxPtr->field_74[position][j].data = gMonSpritesGfxPtr->sprites.ptr[position];
+            gMonSpritesGfxPtr->field_74[position][j].size = MON_PIC_SIZE * 2;
+        }
     } else {
-        HandleLoadSpecialPokePic(&gMonBackPicTable[species], gMonSpritesGfxPtr->sprites.ptr[position], species, currentPersonality);
+        u32 j;
+        if (opponent)
+            HandleLoadSpecialPokePic(&gMonFrontPicTable[species], gMonSpritesGfxPtr->sprites.ptr[position], species, currentPersonality);
+        else
+            HandleLoadSpecialPokePic(&gMonBackPicTable[species], gMonSpritesGfxPtr->sprites.ptr[position], species, currentPersonality);
+        // restore standard frame layout in case this slot previously held an 8bpp mon
+        for (j = 0; j < 4; j++) {
+            gMonSpritesGfxPtr->field_74[position][j].data = gMonSpritesGfxPtr->sprites.ptr[position] + (j * MON_PIC_SIZE);
+            gMonSpritesGfxPtr->field_74[position][j].size = MON_PIC_SIZE;
+        }
     }
 
     paletteOffset = 0x100 + battlerId * 16;
@@ -528,6 +545,15 @@ static void BattleLoadMonSpriteGfx(struct Pokemon *mon, u32 battlerId, bool32 op
     HueShiftMonPalette((u16 *)gDecompressionBuffer, currentPersonality, isAlpha);
     LoadPalette(gDecompressionBuffer, paletteOffset, 0x20);
     LoadPalette(gDecompressionBuffer, 0x80 + battlerId * 16, 0x20);
+
+    if (opponent && SpeciesHas8bppSprites(species)) {
+        // load the detailed art palette into OBJ entries 128-255 (banks 0-7 stay
+        // with the battler/UI palettes), skipping the reserved low entries.
+        bool32 isShiny8bpp = GetMonData(mon, MON_DATA_IS_SHINY, 0) != 0;
+        LoadPalette(GetSpecies8bppFrontPal(species, isShiny8bpp) + (SABREVOIR_8BPP_FRONT_PAL_OFFSET - 0x100),
+                    SABREVOIR_8BPP_FRONT_PAL_OFFSET,
+                    SABREVOIR_8BPP_FRONT_PAL_COLORS * 2);
+    }
 
     if (species == SPECIES_CASTFORM || species == SPECIES_CHERRIM) {
         paletteOffset = 0x100 + battlerId * 16;

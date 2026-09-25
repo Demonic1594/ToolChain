@@ -316,6 +316,20 @@ const struct OamData gOamData_BattleSpriteOpponentSide = {
     .affineParam = 0,
 };
 
+const struct OamData gOamData_BattleSpriteOpponentSide8bpp = {
+    .y = 0,
+    .affineMode = ST_OAM_AFFINE_NORMAL,
+    .objMode = ST_OAM_OBJ_NORMAL,
+    .bpp = ST_OAM_8BPP,
+    .shape = SPRITE_SHAPE(64x64),
+    .x = 0,
+    .size = SPRITE_SIZE(64x64),
+    .tileNum = 0,
+    .priority = 2,
+    .paletteNum = 0,
+    .affineParam = 0,
+};
+
 const struct OamData gOamData_BattleSpritePlayerSide = {
     .y = 0,
     .affineMode = ST_OAM_AFFINE_NORMAL,

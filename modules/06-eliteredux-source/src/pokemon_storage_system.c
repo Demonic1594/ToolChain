@@ -4615,7 +4615,8 @@ static u16 TryLoadMonIconTiles(SpeciesEnum species, u32 personality) {
     sStorage->numIconsPerSpecies[i]++;
     offset = 16 * i;
     species &= GENDER_MASK;
-    CpuCopy32(GetMonIconTiles(species, personality), (void*)(OBJ_VRAM0) + offset * 32, 0x200);
+    // storage uses fixed 16-tile icon slots, so 8bpp species fall back to their 4bpp icon
+    CpuCopy32(GetMonIconTiles4bpp(species, personality), (void*)(OBJ_VRAM0) + offset * 32, 0x200);
 
     return offset;
 }
