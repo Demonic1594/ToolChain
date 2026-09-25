@@ -5402,9 +5402,10 @@ constexpr Ability Impl<ABILITY_BLADEMASTER> = {
 template <>
 constexpr Ability Impl<ABILITY_ARCANE_STANCE> = {
     // Mystique Armament's type recalculates to whatever's most effective against the target
+    // (its declared Fairy typing is display-only; the conversion gate must match it)
     .onMoveType = +[](ON_MOVE_TYPE) -> int {
         CHECK(move == MOVE_MYSTIQUE_ARMAMENT)
-        CHECK(moveType == TYPE_NORMAL)
+        CHECK(moveType == TYPE_FAIRY)
 
         Type best = TYPE_STEEL;  // tie-break default
         u16 bestMult = 0;
@@ -5418,10 +5419,6 @@ constexpr Ability Impl<ABILITY_ARCANE_STANCE> = {
         }
         return best + 1;  // onMoveType return is type+1, per the ATE_ABILITY convention
     },
-    // Power-double: identical to Sovereign Prowess (Huge Power + Feline Prowess + Equinox)
-    .onStat = Impl<ABILITY_SOVEREIGN_PROWESS>.onStat,
-    .onChooseOffensiveStat = Impl<ABILITY_SOVEREIGN_PROWESS>.onChooseOffensiveStat,
-
     // Stance linkage: Mystique Armament -> Sword Forme, Mystic Aegis -> Shield Forme
     // (or, if already Shield Forme, +1 Def/+1 SpDef instead of a forme change)
     .onBeforeAttack = +[](ON_BEFORE_ATTACK) -> int {
@@ -12780,15 +12777,13 @@ constexpr Ability Impl<ABILITY_OVERCLOCK> = {
 
 template <>
 constexpr Ability Impl<ABILITY_PROMISED_VICTORY> = {
-    // Crowned Sword + Blademaster + Pinnacle Blade + Sovereign Prowess
+    // Crowned Sword + Blademaster + Pinnacle Blade
     .onEntry = Impl<ABILITY_CROWNED_SWORD>.onEntry,
     .onInfiltrate = Impl<ABILITY_PINNACLE_BLADE>.onInfiltrate,
     .onAttacker = Impl<ABILITY_PINNACLE_BLADE>.onAttacker,
     .onDefender = Impl<ABILITY_CROWNED_SWORD>.onDefender,
     .onOffensiveMultiplier = Impl<ABILITY_BLADEMASTER>.onOffensiveMultiplier,
-    .onStat = Impl<ABILITY_SOVEREIGN_PROWESS>.onStat,
     .onAccuracy = Impl<ABILITY_PINNACLE_BLADE>.onAccuracy,
-    .onChooseOffensiveStat = Impl<ABILITY_SOVEREIGN_PROWESS>.onChooseOffensiveStat,
     .onCrit = Impl<ABILITY_BLADEMASTER>.onCrit,
 };
 
