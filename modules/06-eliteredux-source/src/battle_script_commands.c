@@ -6672,8 +6672,11 @@ static bool32 IsRototillerAffected(u32 battlerId) {
 }
 
 static int ProtectSucceeds(int battler) {
-    if (!(gBattleMoves[gLastResultingMoves[battler]].flags & FLAG_PROTECTION_MOVE)) gVolatileStructs[battler].protectUses = 0;
+    if (gLastResultingMoves[battler] != MOVE_NONE && gLastResultingMoves[battler] != 0xFFFF &&
+        !(gBattleMoves[gLastResultingMoves[battler]].flags & FLAG_PROTECTION_MOVE))
+        gVolatileStructs[battler].protectUses = 0;
 
+    if (gCurrentMove == MOVE_MYSTIC_AEGIS) return TRUE;  // SabreVoir's Mystic Aegis never fails to brace
     if (gVolatileStructs[battler].protectUses > 3) return FALSE;
     if (sProtectSuccessRates[gVolatileStructs[battler].protectUses] >= Random()) return TRUE;
     return FALSE;
