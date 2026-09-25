@@ -34,6 +34,62 @@
 - A "stat-boost/weaken" battle cheat verified working for this exact
   build (see below)
 
+## SabreVoir (custom species, id 2682/2683)
+
+Steel/Fairy stance-dancing duo built in two passes: creation (sprites,
+codegen, composite innates) then a balance pass. Full session detail lives
+in the repo's local knowledge notes; the shipped state:
+
+**Base stats (BST 600 both formes, speed-mirror design):**
+
+| Forme | HP | Atk | Def | SpA | SpD | Spe |
+|---|---|---|---|---|---|---|
+| Shield (`SPECIES_SABREVOIR`) | 76 | 80 | 148 | 81 | 148 | 67 |
+| Sword (`SPECIES_SABREVOIR_SWORD`) | 76 | 148 | 81 | 148 | 80 | 67 |
+
+**Slots:** ability **Arcane Stance** (both formes); innates **Promised
+Victory**, **Prophetic Destiny**, **Beast of Gluttony**.
+
+**Arcane Stance** = Mystique Armament's type recalculates to the most
+effective one vs the target (gate requires the declared type — currently
+Fairy, display-only), and switches Shield→Sword; Mystic Aegis switches
+Sword→Shield, or raises Def/SpDef if already Shield. Sovereign Prowess was
+removed from it *and* from Promised Victory — the doubling previously
+existed in both and could stack.
+
+**Signature moves** (both 10 PP):
+
+- **Mystique Armament** — 70 BP special, declared Fairy (display), keen
+  edge, strikes **both foes** (the engine's ×0.75 spread modifier only
+  applies at 2+ targets, so singles keeps full power).
+- **Mystic Aegis** — Steel status, priority +2, `EFFECT_PROTECT`-based but
+  **never fails on consecutive use** (`ProtectSucceeds` special-case).
+
+**Innate contents** (verified against the delegations, descriptions in
+`AbilityList.textproto` are prose, not component lists):
+
+- *Promised Victory*: Crowned Sword (+1 Atk on entry/when struck) + Pinnacle
+  Blade (keen-edge moves never miss, pierce protection/substitutes/screens)
+  + Blademaster (keen edge ×1.2 + crit stage)
+- *Prophetic Destiny*: Queenly Majesty (blocks priority vs self **and
+  ally**) + Dragon's Ritual (KO → +1 Atk/+1 Spe) + ER-Long Reach (×1.2
+  physical) + Droideka (half Fire, no crits)
+- *Beast of Gluttony*: Prismatic Fur (×0.5 all damage + Protean/Color
+  Change) + Resilience (¼ heal once per switch-in below half) + Craving
+  (random berry each end turn) + Gluttony
+
+**Counterplay by design** (the "solid in doubles, okay-ish in singles"
+target): Corrosion Toxic (35 carriers; poison chips at full rate — the ×0.5
+never applies to residual damage), Mold Breaker family, Mycelium Might
+status, Encore/Taunt (breaks the stance dance), PP pressure (10+10), and
+its single real weakness (Ground) nets ~×1 after the halving — status, not
+damage, is the intended lane. ER's Long Reach being a physical ×1.2 (not
+the no-contact ability) and Resilience being once-per-switch-in are both
+verified engine facts worth remembering when reading its kit.
+
+An 8bpp front-sprite system for it (256-color detailed opponent sprites)
+is a separate in-progress workstream.
+
 ## Shedinja moveset changes (latest session)
 
 Mega Shedinja has no learnset of its own: `findLearnsetForSpecies()` in

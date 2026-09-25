@@ -35,7 +35,8 @@ Current state of the tree, in one table:
 |---|---|
 | Fixes 3-33 present in source | yes (re-checked against v2.65.2.3b) |
 | Fixes 34-93 present in source | yes (systematic review pass; all compiled `-Werror`) |
-| Full build (`make -j1`) | `MAKE_EXIT=0` — EWRAM 250,954 B (95.73%), IWRAM 79.22%, ROM 23.7 MB (70.77%) |
+| SabreVoir balance pass | yes (see [game-changes.md](game-changes.md); committed on this branch) |
+| Full build (`make -j3`, native-JDK codegen) | `MAKE_EXIT=0` in ~20 min — EWRAM 250,954 B (95.73%), IWRAM 79.22%, ROM 23.7 MB (70.77%) |
 | Boot test (mGBA, 2500 frames) | passes — Groudon logo renders, no crash |
 | Symbol addresses vs cheat tables | unchanged (`gBattleMons` `0x0201C554`, `gVolatileStructs` `0x0201C814`, `gSideStatuses` `0x0201C7A8`) |
 | **In-battle playtest of fixes 5-93** | **still outstanding** — see the priority list in [open-findings.md](open-findings.md) |
