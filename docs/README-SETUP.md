@@ -175,14 +175,25 @@ in this package.
 
 ### Important build gotchas (all real things that happened)
 
-- **`make` can take 15-30+ minutes on a single core.** If your tool/shell
-  has a timeout shorter than that (ours was 300 seconds per command), you
-  cannot run it in one shot. Run `make -j1` repeatedly - it's incremental
-  and will resume where it left off. **But check for 0-byte object files
-  first if a run got killed mid-compile**: `find build -size 0 -name
-  "*.o" -delete` before resuming, or you'll get baffling "undefined
+- **`make` can take 15-30+ minutes on a single core** (70+ min under qemu on
+  aarch64, longer if the phone is busy - guest `/proc` load reflects the
+  Android host, so a load spike throttles the emulated compiler too). If your
+  tool/shell has a timeout shorter than that (ours was 300 seconds per
+  command), you cannot run it in one shot. Run `make -j1` repeatedly - it's
+  incremental and will resume where it left off. **But check for 0-byte
+  object files first if a run got killed mid-compile**: `find build -size 0
+  -name "*.o" -delete` before resuming, or you'll get baffling "undefined
   reference" link errors from a truncated file that looks up-to-date to
   `make`'s timestamp check.
+- **`check-compile.sh` on the giant files can take minutes each on a loaded
+  aarch64 host.** Small files return in ~4 s, but `battle_script_commands.c`
+  (13k lines), `battle_util.c` (9.4k) and `abilities.cc` (13k, C++) run their
+  qemu-wrapped `cc1` for several minutes apiece when the phone is loaded.
+  Batch those detached (`setsid nohup ... > logs/checkcompile.log 2>&1 &`)
+  and poll the log, or an interrupted tool call can leave the impression of
+  a hang (a stray `cc1` under qemu also keeps spinning until killed).
+  Compile order tip: smallest files first - a clean 4 s result proves the
+  toolchain path is fine before you commit to the long ones.
 - **`DEVKITARM` env var must be set** (`scripts/02-env.sh` does this). The
   Makefile's internal `PATH_MODERNCC` construction is broken without it -
   it builds a nonsense PATH string and silently falls through to
