@@ -434,3 +434,74 @@ with no network, one core, and no `7z`:
   renders). Not playtested in battle.
 - Repackaged: inner zip re-created with `ZIP_LZMA`, excluding `devkitARM/`
   (`scripts/02-env.sh` recreates it) and `modules/06-eliteredux-source/build/`.
+
+## Session log: codegen pipeline debug + JDK 21 optimization (Sep 2026)
+
+Paths below use the original flat-package layout (`eliteredux-source/` =
+`modules/06-eliteredux-source/`, `tools-notes/` = `modules/07-tools-notes/`).
+The source-level changes ship in this repo under `patches/` and are applied
+by stage `01c-apply-patches`.
+
+- **Per-file JVM invocations replaced with one batched run.** The codegen
+  makefile's `GENERATE` rule used to spawn a fresh `java` process for each of
+  the 57 generated outputs; JVM startup plus re-parsing of the big textprotos
+  (TrainerList.textproto alone is 119k lines) was paid 57 times - measured
+  **330 s** for a full regeneration on 4 cores. A tiny Java driver
+  (`tools/codegen/batch/er/BatchGenerator.java`) now runs all generators in
+  one JVM, so the textprotos are parsed once and startup is paid once:
+  **~13-30 s** depending on disk cache (10-25x faster). The per-output make
+  targets remain for dependency tracking and recover a deleted file by
+  forcing one full batch regeneration. `CODEGEN_JAVA_FLAGS ?= -Xmx2g` bounds
+  the batch JVM's heap. (AppCDS and GC-flag tuning were measured and showed
+  no consistent win - not adopted.)
+- **Reproducibility bug fixed in `TrainerPartyGenerator`.** Party symbol
+  names were built from `List.hashCode()` of protobuf messages; protobuf's
+  `Message.hashCode()` mixes in the descriptor's *identity* hash code, which
+  differs between JVM runs - so the `__sParty_*` symbol names (and therefore
+  `trainers.h` bytes, and even linker section ordering) were never
+  reproducible across environments. This is the root cause of the "rebuilt
+  .gba differs from the shipped one by only 4 bytes" notes above - it was
+  never just timestamps. Fixed with a deterministic hash (spec-defined
+  `String.hashCode()` over the message's TextFormat serialization). Verified:
+  trainer **data** is identical across the old checked-in pipeline, per-file
+  runs and batched runs (only symbol names ever differed); three fresh runs
+  now produce byte-identical output, and batch vs single-file runs agree
+  byte-for-byte.
+- **Clean-build breakers fixed in `tools/codegen/makefile`:**
+  - `protoc --descriptor_set_out` / `--dependency_out` fail on missing
+    directories; the rules only ever mkdir'd the top level, so subdir protos
+    (and the vendored `proto/google/protobuf/descriptor.proto`, which the
+    `*/*.proto` wildcard also caught) would break a from-scratch run.
+    `mkdir -p $(dir ...)` added everywhere.
+  - `google/` is now excluded from `PROTO_SRCS`: running the depset/@NEXT/
+    `--java_out` steps on it would regenerate `com.google.protobuf.*`
+    sources into `src/`, shadowing `protobuf-java.jar` on the classpath.
+  - `codegen.jar`'s javac classpath referenced a nonexistent
+    `protobufkt.jar` (typo for `protobuf-kotlin.jar`); it only worked
+    because javac silently ignores missing classpath entries.
+  - `perl -pi.bak` `.textproto.bak` leftovers (19 files) are now cleaned up
+    by the rule.
+- **`codegenkt.jar` rebuilt with the bundled kotlinc 2.0.10 on the bundled
+  JDK 21.** Two gotchas for the next session: kotlinc OOMs at default heap
+  on this tree - `JAVA_OPTS=-Xmx4g` (`scripts/02-env.sh` exports it) is
+  required; and if a previous kotlinc run died, a stray *directory* named
+  like the `-d` target makes later runs emit loose classes instead of a jar
+  - `rm -rf` the target first. The rebuilt jar also dropped ~107 stale
+  compiler-internal classes that had leaked into `er/` in the shipped jar
+  (unreferenced, harmless, but gone now); all 57 outputs verified
+  byte-identical after.
+- **mGBA harness ffmpeg 6 dependency.** The bundled `libmgba.so.0.10` links
+  against ffmpeg 6 (`libavcodec.so.60`). x86-64 hosts: `apt install
+  libavcodec60 libavfilter9 libavformat60 libavutil58 libswresample4
+  libswscale7 libpostproc57` (already in the CI workflow). On this machine
+  the noble-era libs + transitive deps were also unpacked directly into
+  `mgba-libs/` - fully self-contained.
+- **Rebuild + boot test after the fixes** (flat package, `make -j4`):
+  MAKE_EXIT=0 in ~8.5 min; EWRAM 250,954 B (95.73%) and ROM 23,733,792 B
+  (70.73%) match the recorded baseline exactly; IWRAM 25,964 B (79.24%,
+  +4 B alignment jitter from the relink - expected with the new symbol
+  names). Boot-tested 2500 frames with screenshots: splash -> intro
+  animation -> Groudon logo all render, no crash. The screenshot harness is
+  available as `scripts/boottest.py` (run it under the bundled Python; note
+  the video buffer must be attached *before* `reset()` or captures come out
+  blank).

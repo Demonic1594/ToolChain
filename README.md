@@ -38,9 +38,10 @@ One-time prerequisites by host arch:
 | 0 | `00-extract` | Resolve the toolchain archive (local joined zip → local parts → auto-download from the `toolchain-v1` release, always SHA256-verified), extract into `modules/` |
 | 1 | `01-restore-exec-bits` | `chmod +x` every ELF/script/binary, touch prebuilt host tools |
 | 2 | `01b-wrap-x86_64` | *aarch64 only:* rename each x86-64 binary to `*.x86_64` and leave a qemu-launching shim at its original path |
-| 3 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
-| 4 | `03-build` | Detached (`setsid nohup`) `make -j3` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
-| 5 | `04-verify` | Data-pipeline assertions (generated ability data, ROM size, `.map`), copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
+| 3 | `01c-apply-patches` | Copy the `patches/eliteredux-source/` overlay (source-level fixes, e.g. the codegen batching/determinism work) into `modules/06-eliteredux-source/` |
+| 4 | `02-env` | Build the unified `devkitARM/` bin dir (symlink shim incl. bare `as`/`ld`), export `PATH`/`CPATH`/`CPLUS_INCLUDE_PATH`, verify the toolchain |
+| 5 | `03-build` | Detached (`setsid nohup`) `make -j3` with `MAKE_EXIT=` recorded in `logs/build.log`; cleans 0-byte `.o` first, waits and reports |
+| 6 | `04-verify` | Data-pipeline assertions (generated ability data, ROM size, `.map`), copy the fresh ROM, run it 2500 frames in mGBA via the bundled Python 3.11 |
 
 Runner options:
 
@@ -56,6 +57,8 @@ Standalone helpers:
 ```bash
 bash scripts/selftest.sh            # smoke-test every toolchain component (~1 min)
 bash scripts/check-compile.sh FILE… # compile-check game sources (exact Makefile flags, -Werror)
+"$MOD_PY/bin/python3.11" scripts/boottest.py ROM [OUTDIR] [FRAMES]
+                                    # boot test with screenshots (out/logs/boot_f*.bmp)
 ```
 
 Useful after editing game source (incremental build, then boot test):
@@ -74,8 +77,11 @@ archives/               SHA256SUMS (per part + joined archive). The archive
                         `toolchain-v1`; stage 0 downloads it automatically on
                         first run (override with TOOLCHAIN_ARCHIVE_URL) or
                         uses local parts / joined zip when present
+patches/                source-level overlays copied over modules/ by stage
+                        01c (currently: tools/codegen batching + fixes)
 scripts/                one stage per script + fetch-x86_64-root.sh,
-                        selftest.sh (toolchain smoke test), check-compile.sh
+                        selftest.sh (toolchain smoke test), check-compile.sh,
+                        boottest.py (boot test with screenshots)
 .github/workflows/      CI: full pipeline (selftest -> build -> boot test)
                         on every push, ROM attached as artifact
 docs/                   the package guides (SETUP, PROJECT) — path mapping
@@ -151,8 +157,12 @@ wherever you keep your source drop, or re-package the module.
   back to native libs) and never affected the build result.
 - `flips-linux` links GTK 3, which the sysroot intentionally omits; it is not
   used by the build. Apply `.bps` patches with flips on a desktop if needed.
-- Fresh builds differ from the shipped reference ROM by a few bytes
-  (embedded timestamps), which matches the upstream package's own notes.
+- Fresh builds no longer differ from each other: the codegen overlay fixes
+  the protobuf-hash-based party symbol names that made `trainers.h` (and
+  linker section order) vary per JVM, which is what produced the old "differs
+  by a few bytes" notes. Regenerating the headers is deterministic now, and
+  the 57 per-file JVM spawns are one batched run (~13-30 s instead of
+  ~330 s), which also shrinks the qemu codegen phase on aarch64.
 
 ## Documentation
 
