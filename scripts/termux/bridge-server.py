@@ -127,6 +127,11 @@ class Handler(BaseHTTPRequestHandler):
             timeout = min(int(req.get("timeout", 3600)), 4 * 3600)
             cwd = ws_path(req.get("cwd", "."))
             env = dict(os.environ)
+            # Termux login shells inject bionic LD_PRELOAD/LD_LIBRARY_PATH
+            # (termux-exec); they poison every glibc binary the native lane
+            # runs. Scrub unless the request explicitly re-adds them.
+            env.pop("LD_PRELOAD", None)
+            env.pop("LD_LIBRARY_PATH", None)
             env.update({k: str(v) for k, v in (req.get("env") or {}).items()})
             if not LOCK.acquire(blocking=False):
                 return self._json(409, {"error": "busy - a job is already running"})
