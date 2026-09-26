@@ -15,7 +15,22 @@ Expected: full rebuild ~20 min → ~6-8 min.
 - The **driver and binutils run natively at full speed**:
   `arm-none-eabi-gcc --version`, `readelf`, `strip` all work.
 
-## The blocker
+## RESULT (2026-09-26): PROVEN BYTE-IDENTICAL on arm64 CI
+
+GitHub `ubuntu-24.04-arm` (job `native-arm64` in build.yml, this branch):
+full build with Arm's aarch64-hosted 13.2.rel1 (`ER_ARM_TC=native`,
+target-side newlib/libgcc symlinked from the bundled toolchain — Arm's
+release has no armv4t multilib) produced a ROM with sha1
+`cea43568995096706a404ea96492b5accb52d429` — identical to the same
+commit's x86_64-toolchain build. Same-snapshot/different-host GCC emits
+identical ARM code. EWRAM/IWRAM/ROM usages match exactly. The lane is
+proven; promotion on any real arm64 glibc host is a default flip.
+
+CI timing reference: whole arm job 3m51s including toolchain download,
+poryscript-from-source, `make tools`, codegen and full build at -j4
+(x86 job: 3m17s on a 4-core runner).
+
+## The blocker (local PRoot only)
 
 `cc1` (and by extension `cc1plus`, `lto1`, `collect2`-adjacent binaries)
 dies with SIGSEGV **at exec time** under PRoot — before the dynamic loader
