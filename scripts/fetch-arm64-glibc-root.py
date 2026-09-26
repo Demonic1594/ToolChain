@@ -4,7 +4,8 @@ import gzip, io, lzma, os, re, subprocess, sys, tarfile, time, urllib.request
 
 MIRROR = "https://deb.debian.org/debian"
 SUITE = "trixie"
-OUT = "/workspace/ToolChain/modules/91-arm64-glibc-root"
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "modules", "91-arm64-glibc-root")
 PKGS = ["libc6", "libgcc-s1", "libstdc++6", "zlib1g", "libzstd1",
         "libisl23", "libmpc3", "libmpfr6", "libgmp10"]
 

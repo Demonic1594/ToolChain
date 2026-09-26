@@ -87,13 +87,26 @@ fi
 # under PRoot ("Failed to mark memory page as executable") - probing -version's
 # exit code skips those automatically. The C toolchain stays qemu-wrapped.
 NATIVE_JDK=""
-if [ "$ARCH" != "x86_64" ]; then
+if [ "$ARCH" != "x86_64" ] || [ "${ER_ARM_TC:-}" = "native" ]; then
   for cand in /usr/lib/jvm/java-17-openjdk /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/*-openjdk; do
     if [ -x "$cand/bin/java" ] && "$cand/bin/java" -version >/dev/null 2>&1; then
       NATIVE_JDK="$(cd "$cand" && pwd)"
       break
     fi
   done
+  # Termux: the JDK lives in its own prefix, not /usr/lib/jvm - fall back to
+  # PATH resolution (pkg-installed openjdk reports 17/21 and runs natively).
+  if [ -z "$NATIVE_JDK" ]; then
+    SYS_JAVA="$(command -v java 2>/dev/null || true)"
+    if [ -n "$SYS_JAVA" ] && "$SYS_JAVA" -version >/dev/null 2>&1; then
+      JV="$("$SYS_JAVA" -version 2>&1 | head -1)"
+      JMAJOR="${JV#*\"}"   # strip up to the opening quote of the version
+      JMAJOR="${JMAJOR%%.*}"
+      case "$JMAJOR" in
+        1[789]|2[0-9]) NATIVE_JDK="$(cd "$(dirname "$SYS_JAVA")/.." && pwd)" ;;
+      esac
+    fi
+  fi
 fi
 if [ -n "$NATIVE_JDK" ]; then
   export PATH="$DEVKITARM/bin:$NATIVE_JDK/bin:$MOD_JDK/bin:$MOD_KOTLINC/bin:$PATH"
