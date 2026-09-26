@@ -25,7 +25,12 @@ jobs:
         run: bash scripts/selftest.sh
 
       - name: Build + verify (stages 2-5)
-        run: ./run.sh --from wrap
+        run: |
+          ./run.sh --from wrap || {
+            echo '=== BUILD LOG (last 60 lines) ==='
+            tail -60 logs/build.log
+            exit 1
+          }
 
       - name: Upload ROM
         uses: actions/upload-artifact@v4
