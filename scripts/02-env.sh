@@ -23,6 +23,18 @@ if [ "${ER_ARM_TC:-}" = "native" ]; then
     return 1 2>/dev/null || exit 1
   fi
   export ER_ARM_TC NATIVE_GCC
+  # Target-side link inputs stay 100% from the bundled toolchain: Arm's
+  # official release has no armv4t multilib (GBA arch), and reusing the
+  # trusted newlib/libgcc makes the native lane's ROM byte-comparison hinge
+  # purely on cc1/as output equality. Compilation headers already come from
+  # the bundled tree via CPATH below.
+  NATIVE_TC_LIBDIR="$NATIVE_GCC/lib/gcc/arm-none-eabi/13.2.1"
+  if [ -d "$NATIVE_TC_LIBDIR" ] && [ ! -L "$NATIVE_TC_LIBDIR" ]; then
+    mv "$NATIVE_TC_LIBDIR" "${NATIVE_TC_LIBDIR}.arm-orig" 2>/dev/null || true
+  fi
+  [ -e "$NATIVE_TC_LIBDIR" ] || ln -sfn "$MOD_GCC/lib/gcc/arm-none-eabi/13.2.1" "$NATIVE_TC_LIBDIR"
+  mkdir -p "$NATIVE_GCC/lib/arm-none-eabi"
+  ln -sfn "$MOD_GCC/lib/arm-none-eabi/newlib" "$NATIVE_GCC/lib/arm-none-eabi/newlib"
 else
   unset NATIVE_GCC
 fi
