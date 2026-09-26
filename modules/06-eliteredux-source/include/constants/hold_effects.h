@@ -1,0 +1,15 @@
+#ifndef GUARD_HOLD_EFFECTS_H
+#define GUARD_HOLD_EFFECTS_H
+
+#include "generated/constants/hold_effects.h"
+
+#define HOLD_EFFECT_CHOICE(holdEffect)((holdEffect == HOLD_EFFECT_CHOICE_BAND || holdEffect == HOLD_EFFECT_CHOICE_SCARF || holdEffect == HOLD_EFFECT_CHOICE_SPECS))
+
+// Terrain seed params
+#define HOLD_EFFECT_PARAM_ELECTRIC_TERRAIN  0
+#define HOLD_EFFECT_PARAM_GRASSY_TERRAIN    1
+#define HOLD_EFFECT_PARAM_MISTY_TERRAIN     2
+#define HOLD_EFFECT_PARAM_PSYCHIC_TERRAIN   3
+#define HOLD_EFFECT_PARAM_TOXIC_TERRAIN     4
+
+#endif // GUARD_HOLD_EFFECTS_H
