@@ -72,7 +72,7 @@ jobs:
           git clone -q --depth 1 --branch 3.6.1 https://github.com/huderlem/poryscript /tmp/porysrc
           make -C /tmp/porysrc -j"$(nproc)" > /dev/null
           cp /tmp/porysrc/poryscript tools/poryscript/poryscript
-          tools/poryscript/poryscript --version
+          tools/poryscript/poryscript -v
 
       - name: Build with the native toolchain (ER_ARM_TC=native)
         run: |
