@@ -115,3 +115,51 @@ fetch-arm64-glibc-root.py, and the Termux quirk catalogue below.
   write-vs-execute policy on file-backed mappings in the app domain
   that small binaries never trip but the ~27 MB compiler image does -
   no userspace workaround exists without relinking cc1
+
+## TERMUX CLANG LANE: WORKING (2026-09-26, final)
+
+After the glibc/musl GCC lanes were ruled impossible on this device, a
+clang-based lane was built and verified:
+
+- **Compiler**: Termux's native bionic clang 21.1.8 (--target=arm-none-eabi)
+- **Assembler**: clang integrated-as (with -Wa,-defsym and syntax patches)
+- **Linker**: Alpine musl GNU ld 2.45.1 (ld.bfd) with bundled newlib/libgcc
+- **Speed**: C-compile rebuild in **105 s** at -j4 (vs ~18 min qemu = ~10x)
+- **Verification**: MAKE_EXIT=0, ROM boots in mGBA 2500 frames, memory
+  usage sane (EWRAM 95.44%, ROM 69.87%)
+
+### Hybrid architecture (what compiles where)
+
+| Component | Compiled by | Where |
+|---|---|---|
+| ~320 C files (src/*.c, gflib/*.c) | **Termux clang** | phone, native |
+| 3 C++ files (abilities.cc, battle_skills.cc, script_conditions.cc) | qemu GCC | phone (prebuilt .o) |
+| m4a_1.s + 3 battle script .s files | qemu GCC | phone (prebuilt .o) |
+| 16 data .o (battle_anim, event_scripts, etc.) | qemu GCC | phone (prebuilt .o) |
+| ~716 sound/song .o | qemu GCC | phone (prebuilt .o) |
+| Link (GNU ld + newlib/libgcc) | **musl GNU ld** | phone, native |
+
+Prebuilt objects are controlled by HYBRID_OBJS=1 (empty-recipe in Makefile);
+they are deterministic given unchanged sources and only need re-shipping
+when their sources change.
+
+### Clang-GCC compatibility shims (scripts/termux/clang-lane-final.sh)
+
+- Flag translation: strips -fno-toplevel-reorder, -mabi=apcs-gnu,
+  -mtune=arm7tdmi, -mthumb-interwork, -fhex-asm, -Wno-builtin-declaration-
+  mismatch (all GCC-only)
+- Warning suppression (~28 flags, all appended AFTER incoming args to
+  survive clang's -Wall re-enabling)
+- .syntax divided -> .syntax unified (include/global.h, one-line patch)
+- .set symbols in Thumb imm5 slots: add # prefix (libgcnmultiboot.s)
+- GNU-as lax movs in thumb: mov -> movs (libagbsyscall.s)
+- as shim: -Wa,-defsym syntax + -o/stdin handling
+- ld shim: musl GNU ld with -L to bundled newlib/libgcc
+- C++ (-Wno-error + -D_LIBCPP_HAS_NO_THREADS to avoid libc++ trap)
+
+### NOT byte-identical
+
+The ROM differs from the GCC build (~62% of bytes) due to clang codegen.
+It boots and behaves correctly, but is a **different toolchain's output**.
+The byte-identical lane remains CI (native-arm64 job) or real arm64
+hardware with the glibc GCC 13.2 lane.
