@@ -24,9 +24,83 @@ jobs:
       - name: Build + verify (stages 2-5)
         run: ./run.sh --from wrap
 
-      - name: Upload ROM
+      - name: Upload ROM (x86_64 toolchain)
         uses: actions/upload-artifact@v4
         with:
           name: pokeemerald_modern
           path: modules/06-eliteredux-source/pokeemerald_modern.gba
           if-no-files-found: warn
+
+  # Native aarch64 fast lane: same tree, same compiler version (Arm 13.2.rel1,
+  # aarch64-hosted) compiled natively on a free arm64 runner. Proves the lane
+  # and byte-compares the ROM against the x86_64 build above.
+  native-arm64:
+    runs-on: ubuntu-24.04-arm
+    needs: build
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host prerequisites
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential libpng-dev libgmp10 libmpfr6 libmpc3 libisl23 zlib1g unzip wget cmake git openjdk-17-jre-headless
+
+      - name: Extract toolchain (stage 0 + 1 + patches)
+        run: ./run.sh --only extract && ./run.sh --only exec-bits && ./run.sh --only patches
+
+      - name: Install Arm aarch64-hosted GCC 13.2.rel1
+        run: |
+          curl -sL -o /tmp/arm-tc.tar.xz "https://developer.arm.com/-/media/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-aarch64-arm-none-eabi.tar.xz"
+          mkdir -p modules/10-native-gcc
+          tar -xJf /tmp/arm-tc.tar.xz -C modules/10-native-gcc --strip-components=1
+          modules/10-native-gcc/bin/arm-none-eabi-gcc --version | head -1
+
+      - name: Replace x86-only host tools with native builds
+        run: |
+          cd modules/06-eliteredux-source
+          # force make to rebuild the in-tree host tools with the host compiler
+          rm -f tools/preproc/preproc tools/gbagfx/gbagfx tools/scaninc/scaninc \
+                tools/mapjson/mapjson tools/mid2agb/mid2agb tools/bin2c/bin2c \
+                tools/jsonproc/jsonproc tools/ramscrgen/ramscrgen \
+                tools/rsfont/rsfont tools/gbafix/gbafix
+          # arm64 protoc 29.2 (official prebuilt) for the codegen pipeline
+          curl -sL -o /tmp/protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v29.2/protoc-29.2-linux-aarch_64.zip"
+          unzip -qo /tmp/protoc.zip -d /tmp/protoc bin/protoc
+          cp /tmp/protoc/bin/protoc tools/codegen/protoc && chmod +x tools/codegen/protoc
+          tools/codegen/protoc --version
+          # poryscript has no arm64 release; build 3.6.1 from source (C++/CMake)
+          rm -f tools/poryscript/poryscript tools/poryscript/poryscript.zip
+          git clone -q --depth 1 --branch 3.6.1 https://github.com/huderlem/poryscript /tmp/porysrc
+          cmake -S /tmp/porysrc -B /tmp/porybuild -DCMAKE_BUILD_TYPE=Release > /dev/null
+          cmake --build /tmp/porybuild -j > /dev/null
+          find /tmp/porybuild -type f -name poryscript -perm -u+x -exec cp {} tools/poryscript/poryscript \;
+          tools/poryscript/poryscript --version
+
+      - name: Build with the native toolchain (ER_ARM_TC=native)
+        run: |
+          export ER_ARM_TC=native ER_BUILD_JOBS=$(nproc)
+          ./run.sh --only env
+          ./run.sh --only build || { echo '--- last 40 build log lines ---'; tail -40 logs/build.log; exit 1; }
+          grep -E 'EWRAM|IWRAM|ROM:' logs/build.log | tail -3
+
+      - name: Upload ROM (aarch64-native toolchain)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokeemerald_modern-native-arm64
+          path: modules/06-eliteredux-source/pokeemerald_modern.gba
+          if-no-files-found: warn
+
+      - name: Download the x86_64-toolchain ROM
+        uses: actions/download-artifact@v4
+        with:
+          name: pokeemerald_modern
+          path: /tmp/x86rom
+
+      - name: Byte-compare vs the x86_64-toolchain ROM
+        run: |
+          sha1sum /tmp/x86rom/pokeemerald_modern.gba modules/06-eliteredux-source/pokeemerald_modern.gba
+          if cmp -s /tmp/x86rom/pokeemerald_modern.gba modules/06-eliteredux-source/pokeemerald_modern.gba; then
+            echo "BYTE-IDENTICAL: native aarch64 lane reproduces the x86_64 toolchain ROM exactly."
+          else
+            echo "ROMS DIFFER - native lane output is NOT byte-identical; see NATIVE-GCC-STATUS.md next steps."
+            cmp -l /tmp/x86rom/pokeemerald_modern.gba modules/06-eliteredux-source/pokeemerald_modern.gba | head -10
+          fi

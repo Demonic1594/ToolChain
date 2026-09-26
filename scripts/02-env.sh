@@ -10,18 +10,45 @@ MOD_PY="$PKGROOT/modules/05-python-mgba/python3.11-mgba"
 MOD_MGBA_LIBS="$PKGROOT/modules/05-python-mgba/mgba-libs"
 MOD_SRC="$PKGROOT/modules/06-eliteredux-source"
 
-mkdir -p "$PKGROOT/devkitARM/bin"
-ln -sfn "$MOD_GCC"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
-ln -sfn "$MOD_BINUTILS"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
-for tool in as ld ar nm objcopy objdump ranlib strip; do
-  ln -sfn "$MOD_BINUTILS/bin/arm-none-eabi-$tool" "$PKGROOT/devkitARM/bin/$tool"
-done
+# ER_ARM_TC=native: use an aarch64-hosted arm-none-eabi toolchain from
+# modules/10-native-gcc/ (e.g. Arm's official 13.2.rel1 aarch64 build) instead
+# of the bundled x86_64 one. On a glibc aarch64 host (CI arm runners, real
+# hardware) this is the fast lane - no qemu, no x86_64 sysroot. On a musl/PRoot
+# host it additionally needs patchelf + the arm64 glibc root (see
+# NATIVE-GCC-STATUS.md; cc1 does not exec under PRoot).
+NATIVE_GCC="$PKGROOT/modules/10-native-gcc"
+if [ "${ER_ARM_TC:-}" = "native" ]; then
+  if [ ! -x "$NATIVE_GCC/bin/arm-none-eabi-gcc" ]; then
+    echo "[02] ERROR: ER_ARM_TC=native but $NATIVE_GCC/bin/arm-none-eabi-gcc missing."
+    return 1 2>/dev/null || exit 1
+  fi
+  export ER_ARM_TC NATIVE_GCC
+else
+  unset NATIVE_GCC
+fi
 
-CXXVER="$(ls "$MOD_GCC/include/newlib/c++/" 2>/dev/null | head -n1)"
+mkdir -p "$PKGROOT/devkitARM/bin"
+if [ "${ER_ARM_TC:-}" = "native" ]; then
+  ln -sfn "$NATIVE_GCC"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
+  for tool in as ld ar nm objcopy objdump ranlib strip; do
+    ln -sfn "$NATIVE_GCC/bin/arm-none-eabi-$tool" "$PKGROOT/devkitARM/bin/$tool"
+  done
+  CXXVER="$(ls "$MOD_GCC/include/newlib/c++/" 2>/dev/null | head -n1)"
+else
+  ln -sfn "$MOD_GCC"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
+  ln -sfn "$MOD_BINUTILS"/bin/* "$PKGROOT/devkitARM/bin/" 2>/dev/null
+  for tool in as ld ar nm objcopy objdump ranlib strip; do
+    ln -sfn "$MOD_BINUTILS/bin/arm-none-eabi-$tool" "$PKGROOT/devkitARM/bin/$tool"
+  done
+  CXXVER="$(ls "$MOD_GCC/include/newlib/c++/" 2>/dev/null | head -n1)"
+fi
 export DEVKITARM="$PKGROOT/devkitARM"
 
 ARCH="$(uname -m)"
-if [ "$ARCH" != "x86_64" ]; then
+if [ "${ER_ARM_TC:-}" = "native" ]; then
+  # Native lane: no qemu sysroot, no x86_64 libs in LD_LIBRARY_PATH.
+  unset ER_X86_ROOT ER_X86_LIBS
+elif [ "$ARCH" != "x86_64" ]; then
   ER_X86_ROOT="$PKGROOT/modules/90-x86_64-root"
   if [ ! -x "$ER_X86_ROOT/usr/bin/bash" ] && [ ! -x "$ER_X86_ROOT/bin/bash" ]; then
     echo "[02] ERROR: aarch64 host: x86_64 sysroot missing."

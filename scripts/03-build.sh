@@ -14,14 +14,16 @@ done
 mkdir -p "$ROOT/logs"
 : > "$LOG"
 
+JOBS="${ER_BUILD_JOBS:-3}"
+
 setsid nohup bash -c "
   source '$ROOT/scripts/02-env.sh' >/dev/null 2>&1
   cd '$ROOT/modules/06-eliteredux-source' || exit 1
   find build -size 0 -name '*.o' -delete 2>/dev/null
-  echo '=== make -j3 starting: '\$(date)' ==='
-  make -j3
+  echo \"=== make -j$JOBS starting: \$(date) ===\"
+  make -j$JOBS
   echo MAKE_EXIT=\$?
-  echo '=== make -j3 finished: '\$(date)' ==='
+  echo \"=== make -j$JOBS finished: \$(date) ===\"
 " > "$LOG" 2>&1 < /dev/null &
 BUILD_PID=$!
 disown -a 2>/dev/null || true
