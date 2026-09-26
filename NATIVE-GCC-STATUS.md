@@ -60,3 +60,50 @@ The exact same layout should run fine on any non-PRoot aarch64 Linux.
 - `modules/91-arm64-glibc-root/` — glibc runtime (~40 MB)
 - `/tmp/opencode/baseline-qemu-132.gba` — 13.2 baseline ROM (sha1
   `1bd6ad8f…`) for the future byte-comparison
+
+
+## Termux experiment (2026-09-26, later): CLOSED - device cannot host cc1
+
+The full bridge was built and works (token-gated localhost HTTP from the
+PRoot side, file exchange, remote exec). Every supporting layer was made
+to run natively in Termux: the Arm 13.2 driver + binutils (glibc-root +
+patchelf), all 11 host tools (Termux clang; needed CPATH scrubbing -
+02-env exports the ARM newlib headers globally, which poisons host-tool
+compilation), codegen (musl protoc 31.1 + shipped v61 jars behind a new
+CODEGEN_PREBUILT_JARS=1 makefile switch), poryscript (Go, builds fine).
+
+The one thing that cannot run on this device, in ANY configuration:
+
+| cc1 variant | Execution layer | Result |
+|---|---|---|
+| Arm 13.2 (glibc) | direct exec | SIGSYS - Android app-domain seccomp kills `set_robust_list` at loader startup (strace-confirmed) |
+| Arm 13.2 (glibc) | and-code PRoot | SIGSEGV at exec (34 MB EXEC) |
+| Arm 13.2 (glibc) | Termux proot-distro Debian | SIGSEGV - identical |
+| Alpine 16.1 (musl) | direct + loader trick | SIGSEGV |
+
+Small native binaries (gcc driver, protoc, binutils) all run fine; only
+the large compiler image dies everywhere. Conclusion: no software layer
+on this phone can host the game compiler; the native lane is CI/arm64-
+hardware only. The Termux lane was closed and the Termux-side modules
+restored (Arm 13.2 preserved at modules/10-native-gcc for reference).
+
+Deliverables that DO work and stay: the CI `native-arm64` job
+(byte-identical, ~4 min), the bridge (general Termux remote-exec),
+fetch-arm64-glibc-root.py, and the Termux quirk catalogue below.
+
+### Termux quirks catalogue (hard-won, do not rediscover)
+
+- No /tmp; use $TMPDIR (=$PREFIX/tmp)
+- No /bin, /usr/bin: absolute-shebang scripts and Makefile
+  `SHELL := /bin/bash` need patching; termux-exec (LD_PRELOAD) normally
+  translates but must be scrubbed for glibc/musl binaries (it drags in
+  bionic libc.so and breaks foreign loaders)
+- tar extraction: hardlinks unsupported (EPERM) - extract with a
+  copy-converting Python extractor; symlinks cannot be extracted in
+  tarfile stream mode - defer them
+- Termux clang defaults to compiling host tools against the CPATH the
+  toolchain env exports (ARM newlib) -> scrub CPATH/CPLUS_INCLUDE_PATH
+  for host-tool builds
+- poryscript is Go, not C++; `pkg install` needs no cmake
+- Alpine musl binaries run via patchelf'd bundled musl loader + rpath
+  (protoc precedent), but large ones (cc1) do not survive
