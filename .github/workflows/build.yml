@@ -67,12 +67,11 @@ jobs:
           unzip -qo /tmp/protoc.zip -d /tmp/protoc bin/protoc
           cp /tmp/protoc/bin/protoc tools/codegen/protoc && chmod +x tools/codegen/protoc
           tools/codegen/protoc --version
-          # poryscript has no arm64 release; build 3.6.1 from source (C++/CMake)
+          # poryscript has no arm64 release; build 3.6.1 from source (plain Makefile)
           rm -f tools/poryscript/poryscript tools/poryscript/poryscript.zip
           git clone -q --depth 1 --branch 3.6.1 https://github.com/huderlem/poryscript /tmp/porysrc
-          cmake -S /tmp/porysrc -B /tmp/porybuild -DCMAKE_BUILD_TYPE=Release > /dev/null
-          cmake --build /tmp/porybuild -j > /dev/null
-          find /tmp/porybuild -type f -name poryscript -perm -u+x -exec cp {} tools/poryscript/poryscript \;
+          make -C /tmp/porysrc -j"$(nproc)" > /dev/null
+          cp /tmp/porysrc/poryscript tools/poryscript/poryscript
           tools/poryscript/poryscript --version
 
       - name: Build with the native toolchain (ER_ARM_TC=native)
