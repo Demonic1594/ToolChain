@@ -73,6 +73,9 @@ jobs:
           make -C /tmp/porysrc -j"$(nproc)" > /dev/null
           cp /tmp/porysrc/poryscript tools/poryscript/poryscript
           tools/poryscript/poryscript -v
+          # rebuild all in-tree host tools natively (the shipped prebuilts are
+          # x86_64; the ROM build itself does not force this target)
+          make tools
 
       - name: Build with the native toolchain (ER_ARM_TC=native)
         run: |
