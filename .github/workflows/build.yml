@@ -18,6 +18,9 @@ jobs:
       - name: Extract toolchain (stage 0 + 1)
         run: ./run.sh --only extract && ./run.sh --only exec-bits
 
+      - name: Restore tracked source fixes (extraction overwrites them)
+        run: git checkout -- modules/
+
       - name: Toolchain smoke test
         run: bash scripts/selftest.sh
 
