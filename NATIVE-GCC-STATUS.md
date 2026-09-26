@@ -107,3 +107,11 @@ fetch-arm64-glibc-root.py, and the Termux quirk catalogue below.
 - poryscript is Go, not C++; `pkg install` needs no cmake
 - Alpine musl binaries run via patchelf'd bundled musl loader + rpath
   (protoc precedent), but large ones (cc1) do not survive
+- cc1 death mechanism (final strace, unpatched binary via explicit
+  musl loader): kernel maps all LOADs, then SIGSEGV ACCERR on the first
+  write into the executable image (0x68fef0, inside the RX text
+  mapping). Not patchelf, not DT_RELR, not page size (kernel is 4k,
+  confirmed via `-4k` suffix + getconf). This Android build enforces a
+  write-vs-execute policy on file-backed mappings in the app domain
+  that small binaries never trip but the ~27 MB compiler image does -
+  no userspace workaround exists without relinking cc1
