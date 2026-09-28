@@ -20,7 +20,8 @@ jobs:
 
       - name: Restore tracked source fixes (extraction overwrites them)
         run: |
-          git checkout -- modules/
+          # Branches without tracked module files (clean toolchain) skip the restore
+          if [ -n "$(git ls-files modules/)" ]; then git checkout -- modules/; fi
           # textprotos must be newer than generated headers to re-trigger codegen
           find modules/06-eliteredux-source/proto -name '*.textproto' -exec touch {} +
 
