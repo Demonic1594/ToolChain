@@ -7,7 +7,7 @@ ROM with one command.
 
 > **Current release: `v1.1.0`** — batched deterministic codegen, native-JDK
 > lane, per-push CI with ROM artifacts, and a toolchain-only `main` branch.
-> Game-source work continues on `eliteredux-source` (fixes 3-157 on `eliteredux-source`, SabreVoir).
+> Game-source work continues on `eliteredux-source` (fixes 3-160 on `eliteredux-source`, SabreVoir).
 
 Runs **natively on x86-64** (any Linux sandbox, CI runner, or PC) and
 **transparently under qemu emulation on aarch64** (e.g. an Android phone in
