@@ -1,0 +1,138 @@
+#ifndef GUARD_DATA_H
+#define GUARD_DATA_H
+
+#include "generated/constants/moves.h"
+#include "generated/constants/battle_skills.h"
+
+#define SPECIES_SHINY_TAG 5000
+
+enum {
+    BATTLER_AFFINE_NORMAL,
+    BATTLER_AFFINE_EMERGE,
+    BATTLER_AFFINE_RETURN,
+};
+
+struct MonCoords {
+    // This would use a bitfield, but some function
+    // uses it as a u8 and casting won't match.
+    u8 size;  // u8 width:4, height:4;
+    u8 y_offset;
+};
+
+struct TrainerMonNoItemDefaultMoves {
+    u16 iv;
+    u8 lvl;
+    SpeciesEnum species;
+    u8 evs[NUM_STATS];
+    u8 nature;
+};
+
+struct TrainerMonItemDefaultMoves {
+    u16 iv;
+    u8 lvl;
+    SpeciesEnum species;
+    u16 heldItem;
+    u8 evs[NUM_STATS];
+    u8 nature;
+};
+
+struct TrainerMonNoItemCustomMoves {
+    u16 iv;
+    u8 lvl;
+    SpeciesEnum species;
+    MoveEnum moves[MAX_MON_MOVES];
+    u8 evs[NUM_STATS];
+    u8 nature;
+};
+
+typedef struct TrainerMonItemCustomMoves {
+    s8 lvl;
+    SpeciesEnum species;
+    u16 heldItem;
+    u8 ability;
+    u8 spread;
+    MoveEnum moves[MAX_MON_MOVES];
+    u8 hpType;
+    u8 evs[NUM_STATS];
+    u8 nature;
+    bool8 zeroSpeedIvs;
+    bool8 isAlpha;
+} TrainerMonItemCustomMoves;
+
+#define HELL_MODE_MAX_SKILLS 3
+
+struct Trainer {
+    /*0x00*/ u8 partyFlags;
+    /*0x01*/ u8 trainerClass;
+    /*0x02*/ u8 encounterMusic_gender;  // last bit is gender
+    /*0x03*/ u8 trainerPic;
+    /*0x04*/ const u8 *trainerName;
+    /*0x10*/ u16 items[4];
+    /*0x18*/ bool8 doubleBattle;
+    /*0x1C*/ u32 aiFlags;
+    /*0x20*/ u8 partySize;
+    /*0x24*/ const TrainerMonItemCustomMoves * party;
+    /*0x20*/ u8 partySizeInsane;
+    /*0x28*/ const TrainerMonItemCustomMoves * partyInsane;
+    /*0x20*/ u8 partySizeHell;
+    /*0x28*/ const TrainerMonItemCustomMoves * partyHell;
+    /*0x2F*/ u16 trainerFlag;
+    /*0x??*/ BattleSkillEnum hellSkills[HELL_MODE_MAX_SKILLS];
+};
+
+#define TRAINER_ENCOUNTER_MUSIC(trainer) ((gTrainers[trainer].encounterMusic_gender & 0x7F))
+
+extern const u16 gMinigameDigits_Pal[];
+extern const u32 gMinigameDigits_Gfx[];
+
+extern const struct SpriteFrameImage gBattlerPicTable_PlayerLeft[];
+extern const struct SpriteFrameImage gBattlerPicTable_OpponentLeft[];
+extern const struct SpriteFrameImage gBattlerPicTable_PlayerRight[];
+extern const struct SpriteFrameImage gBattlerPicTable_OpponentRight[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_Brendan[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_May[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_Red[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_Leaf[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_RubySapphireBrendan[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_RubySapphireMay[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_Wally[];
+extern const struct SpriteFrameImage gTrainerBackPicTable_Steven[];
+
+extern const union AffineAnimCmd *const gAffineAnims_BattleSpritePlayerSide[];
+extern const union AffineAnimCmd *const gAffineAnims_BattleSpriteOpponentSide[];
+extern const union AffineAnimCmd *const gAffineAnims_BattleSpriteContest[];
+
+extern const union AnimCmd *const gAnims_MonPic[];
+extern const struct MonCoords gMonFrontPicCoords[];
+extern const struct MonCoords gMonBackPicCoords[];
+extern const struct CompressedSpriteSheet gMonBackPicTable[];
+extern const struct CompressedSpriteSheet gMonBackPicTableFemale[];
+extern const struct CompressedSpritePalette gMonPaletteTable[];
+extern const struct CompressedSpritePalette gMonPaletteTableFemale[];
+extern const struct CompressedSpritePalette gMonShinyPaletteTable[];
+extern const struct CompressedSpritePalette gMonRareShinyPaletteTable[];
+extern const struct CompressedSpritePalette gMonLegendaryShinyPaletteTable[];
+extern const struct CompressedSpritePalette gMonShinyPaletteTableFemale[];
+extern const union AnimCmd *const *const gTrainerFrontAnimsPtrTable[];
+extern const struct MonCoords gTrainerFrontPicCoords[];
+extern const struct CompressedSpriteSheet gTrainerFrontPicTable[];
+extern const struct CompressedSpritePalette gTrainerFrontPicPaletteTable[];
+extern const union AnimCmd *const *const gTrainerBackAnimsPtrTable[];
+extern const struct MonCoords gTrainerBackPicCoords[];
+extern const struct CompressedSpriteSheet gTrainerBackPicTable[];  // functionally unused
+extern const struct CompressedSpritePalette gTrainerBackPicPaletteTable[];
+
+extern const u8 gEnemyMonElevation[NUM_SPECIES];
+
+extern const union AnimCmd *const *const gMonFrontAnimsPtrTable[];
+extern const struct CompressedSpriteSheet gMonFrontPicTable[];
+extern const struct CompressedSpriteSheet gMonFrontPicTableFemale[];
+extern int SpeciesHasGenderDifference(SpeciesEnum species);
+
+extern const struct Trainer gTrainers[];
+extern const u8 gTrainerClassNames[][13];
+extern const u8 *const gSpeciesNames[];
+extern const u8 gMoveNames[MOVES_COUNT][MOVE_NAME_LENGTH + 1];
+extern const u8 gMoveNamesLong[MOVES_COUNT][LONG_MOVE_NAME_LENGTH + 1];
+
+#endif  // GUARD_DATA_H
