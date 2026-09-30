@@ -37,7 +37,9 @@ git checkout eliteredux-source -- modules/06-eliteredux-source/
 | [docs/modifications.md](docs/modifications.md) | Everything changed vs upstream: fixes 3–164 by pass, design changes, SabreVoir deep dive, shiny icon system |
 | [docs/source-map.md](docs/source-map.md) | Source tree guide: golden rules, layout, most edit-relevant files |
 | [docs/data-pipeline.md](docs/data-pipeline.md) | The `proto/*.textproto` → C codegen pipeline: flow, rules, regeneration matrix, gotchas |
-| [docs/game-systems.md](docs/game-systems.md) | How the game works: ability slots, randomizer, battle engine, ER-specific quirks |
+| [docs/game-systems.md](docs/game-systems.md) | How the game works: runtime architecture, ability slots, randomizer, battle engine, lifecycle, breeding, items, overworld |
+| [docs/editing-recipes.md](docs/editing-recipes.md) | Verified recipes: species/ability/move/item/trainer/encounter/script edits, C fix workflow, build paths |
+| [docs/known-issues.md](docs/known-issues.md) | Deferred items: design decisions, upstream-class debt, cosmetic gaps, playtest backlog |
 | [docs/building.md](docs/building.md) | Build lanes (qemu / CI / Termux), codegen environment, verification & provenance |
 
 ToolChain-side docs (setup, codegen, project writeups, cheats, testing) are on

@@ -75,25 +75,117 @@ this going wrong).
 
 ## ER-specific quirks (vs vanilla pokeemerald)
 
-- **Flat 1 EXP floor**: exp gain = `expYield*level/5`, clamped to a minimum
-  of 1 per battle — zero-yield species still give something.
-- **catchRate is 0 for ALL species** (generator never emits it): capture
-  odds come only from ball multipliers/additions (`battle_script_commands.c`
-  ~12680: `catchRate<21 && ballAddition==−20 → 1`, then shake checks).
-  Safari: `safariCatchFactor = 0` → same multiplier-only path.
 - **Tutor moves use a bitmask** field, not a learnset list.
 - Megas/forms are first-class species entries (`mega/`, `redux/` graphics
   dirs) with forme-shift machinery (`forms`, `undoforms`,
   `reversemegamap` generators).
 - Battle Skills (AI trainer skills) are an ER-only system layered on the
-  classic AI; a dormant "new" AI engine also exists in `battle_ai_*.c`.
+  classic AI; a dormant "new" AI engine also exists in `battle_ai_new*.c`
+  (upstream WIP, unwired — don't wire it up without addressing its score
+  paths).
+- Flat 1 EXP / catchRate 0 / growthRate 0: see the BaseStats data gap
+  under "Pokémon lifecycle" — data-gap consequences, not mechanics bugs.
+
+## Runtime architecture
+
+- **Boot**: `crt0.s` → `AgbMain()` (`src/main.c`): GPU reg manager, keys,
+  IRQ table, m4a init, RTC, flash check, `InitHeap(gHeap, HEAP_SIZE)`,
+  then the frame loop.
+- **Frame loop** (once per VBlank): `ReadKeys()` → soft-reset check →
+  `UpdateLinkAndCallCallbacks()` → playtime/music → `WaitForVBlank`.
+- **Game modes**: `CallCallbacks()` runs `gMain.callback1()` then
+  `callback2` — CB2 **is** the current game mode (title, overworld,
+  battle…); `SetMainCallback2(fn)` switches, each mode installs its own
+  CB2 state machine.
+- **Concurrency**: no threads. Main work = CB2 state machines + the
+  **task scheduler** (`src/task.c`, 16 slots, `CreateTask`) — tasks are
+  the standard "async" primitive. Interrupts: VBlank (frame), HBlank
+  (scanline FX), VCount, Serial (link), Timer3 (sound DMA). DMA channel 3
+  is queued for VRAM-safe copies (gflib `dma3_manager`).
+- **Memory map**: ROM 0x08000000 (32 MB, expanded); EWRAM 0x02000000
+  (256 KB: `gHeap` + save staging); IWRAM 0x03000000 (32 KB: `gMain`,
+  IRQ stack, globals via `common_syms`); palette/VRAM/OAM written through
+  shadow registers at VBlank.
+
+## Pokémon lifecycle (creation, stats, EXP, evolution)
+
+- `CreateMon*` family → `CreateMonInner`: species, level, personality
+  (u32 — gender/nature/shiny derive from it), ability slot
+  (slot = `personality&1` if abilities[1] present; explicit override via
+  `CreateMonWithAbilityNum`), IVs/nature, then `CalculateMonStats`.
+- `CalculateMonStatsMaster` (`pokemon.c` ~970) computes stats; nature
+  ±10%; Shedinja-style HP=1 lock ~line 1000.
+- Evolution methods: `constants/pokemon.h` (~390–455); Shedinja's
+  EVO_LEVEL_SHEDINJA = 14 is a special case.
+- **BaseStats data gap (ER reality, BY DESIGN)**: `BaseStatsGenerator`
+  emits only base stats/types/abilities/innates/eggGroups/bodyColor/
+  tier/flags/genderRatio. The `struct BaseStats` fields `catchRate`,
+  `expYield`, `evYield_*`, `eggCycles`, `friendship`, `growthRate`,
+  `item1/item2`, `safariZoneFleeRate`, `numShinies` are **zero for every
+  species** (no proto fields exist). Consequences:
+  - Exp gain clamped to **flat 1 EXP per victory** (+1 exp-share);
+    progression is candy-based (Candy Box) by design.
+  - `growthRate` 0 ⇒ everyone uses experience table 0 (MEDIUM_FAST).
+  - EV yields 0 ⇒ `MonGainEVs` no-ops; wild held items never roll;
+    DexNav item preview empty; `numShinies` shiny-palette gating dead.
+  - **catchRate 0 ⇒ capture odds come only from ball multipliers/
+    additions** (`battle_script_commands.c` ~12680 guards odds==0;
+    fix 34 restored the vanilla formula). Safari:
+    `safariCatchFactor = 0` → same multiplier-only path (known issue:
+    safari catching is effectively dead — see known-issues.md).
+  - If real values are ever needed: add proto fields + extend
+    `BaseStatsGenerator.kt` + rebuild jars.
+
+## Breeding (daycare, eggs, inheritance)
+
+- Two daycare slots in `gSaveBlock1Ptr->daycare`; XP per step on
+  withdrawal; egg trigger scored by `GetDaycareCompatibilityScore`
+  (same species/different OT best; shared egg group mid; Oval Charm
+  boosts).
+- Offspring = mother's base line (or non-Ditto parent); form
+  inheritance for Nidoran/Manaphy in `DetermineEggSpecies`; Incense
+  babies gated by held item.
+- **Egg moves are STUBBED**: `GetEggMoves` returns 0 (`daycare.c:511`).
+  Hatchlings get the final base form's level-up learnset (+TM/tutor
+  availability) — classic egg-move lists don't exist in ER.
+- Ability slot inheritance: 60% hidden slot if a parent has it, else
+  mother's current slot, else random among species slots — degenerates
+  safely under `{A,A,A}` locks.
+
+## Items, bag, hold effects
+
+- Source of truth: `proto/items/<Pocket>List.textproto` (pockets =
+  filenames: Battle, Berries, Items, KeyItems, Medicine, MegaStones,
+  PokeBalls, TmHm, Unused) → `itemids`/`itemdata`/`itemgfx`/`pockets`/
+  `naturalgift`/`holdeffect` generators.
+- `struct Item` wires `fieldUseFunc`/`battleUseFunc` **by name** from
+  proto (e.g. `field_use_func: "AbilityCapsule"` →
+  `ItemUseOutOfBattle_AbilityCapsule`); hold-effect fields merge into
+  `holdEffect` + param; mega-location oneof feeds the `megas/*`
+  generators.
+- Field use: bag menu → `ItemUseOutOfBattle_*` callbacks (`item_use.c`);
+  party-targeted items route to `party_menu.c` task handlers (Ability
+  Capsule/Patch, Candy Box, evo stones → `EVO_MODE_ITEM_USE`). Key items
+  are often Special-only (grep `data/scripts` + `field_specials.c`).
+
+## Overworld (scripts, flags/vars, encounters)
+
+- Script VM: `script.c` `RunScriptCommand`; two contexts (map script +
+  nested). 232 `ScrCmd_*` opcodes in `scrcmd.c`. Specials dispatched via
+  the `field_specials.c` table (~5k lines — the ER hook kitchen).
+- Scripts live in `data/maps/<Map>/scripts.pory` + `data/scripts/*.pory`
+  (67 globals), compiled by poryscript to `.inc`. Map events
+  (NPCs/warps/triggers/signs) in each map's `map.json`.
+- Flags: **1507 `FLAG_*`** ids (`constants/flags.h`); vars: **281
+  `VAR_*`** (`constants/vars.h`); stored in `gSaveBlock1`, accessors in
+  `event_data.c`. **Never renumber existing ids** (save compat) — always
+  take the next free one.
+- Wild encounters: NOT proto-driven — `src/data/wild_encounters.json` →
+  jsonproc → headers (land 12 slots / water / rock smash / fishing rows
+  per map); flow: overworld step → `StandardWildEncounter` →
+  `TryGenerateWildMon` (repel/keen-eye checks); pike/pyramid inject
+  their own headers.
 
 ## Related systems (quick pointers)
 
-- Breeding ability-slot inheritance: `daycare.c` / `egg_hatch.c` (table above).
-- Items & hold effects: `item_use.c`, `items-and-holds` generators; ER adds
-  Candy Box, Ability Capsule/Patch, Dream Ball behavior.
-- Overworld: 570 maps/491 layouts via Porymap data in `data/`; scripts as
-  `.pory` compiled to `.inc`.
-- Nuzlocke/quests/day-night: ER additions in `src/nuzlocke.c`, `src/quests.c`,
-  `src/day_night.c`.
+- Frontier rental/import slot rules: `battle_main/factory/pyramid/pike/tower`.

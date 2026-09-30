@@ -75,6 +75,46 @@ From `tools/codegen/`:
   (needs `modules/04-kotlinc` on PATH; `scripts/02-env.sh` on `main` sets
   the whole environment).
 
+## How the build actually runs (tools/codegen/makefile stages)
+
+1. **protos**: perl rewrites `@NEXT` → sequential ids from 10000000;
+   vendored `protoc` (v29.2) generates java/kotlin message classes;
+   `preproc.ProtoProcessor` rewrites any number ≥ 1e7 back to the first
+   free value — so **`NEW_NAME = @NEXT;` in an `*Enum.proto` auto-picks
+   the next free id at build time**.
+2. **jars**: `preproc.jar`, `codegen.jar` (javac), `codegenkt.jar`
+   (kotlinc) — prebuilt in-tree; rebuilt only when sources change.
+3. **textprotos**: perl `@NEXT` → `protoc --encode` → `bin/*.binpb` →
+   `TextprotoProcessor` rewrites big ids **in the textproto in place** to
+   first-free values (numeric ids auto-assign; symbolic refs like
+   `SPECIES_FOO` unaffected).
+4. **generate**: each GENERATE rule runs `er.FileGenerator <type> <out>`.
+
+Staleness is **file mtime** based — touching a textproto re-runs preproc +
+generators. Useful targets: `make regenerate` (wipe
+`../../include/generated`, regen all), `make cleanlocal` (also jars,
+timestamps, proto classes), `make binary` (encode to binpb only).
+
+## Schema conventions (`proto/*.proto`, package `er`)
+
+- Every textproto starts with the required header comments — keep them:
+  ```
+  # proto-file: <Name>.proto
+  # proto-message: er.<Name>
+  ```
+- Enums are referenced by symbol (`SPECIES_GARDEVOIR`,
+  `ABILITY_INTIMIDATE`); proto3 default-0 values are omitted in output.
+- New enum entries: append `NEW_NAME = @NEXT;` (works in `*Enum.proto`).
+- Strings: UTF-8 escaped bytes (`\303\251` for é); the GBA font mapping is
+  applied by codegen (`FontMapping.kt`).
+- Schemas are editable (source of truth) — but enum/field changes force
+  a jar rebuild first.
+- `SpeciesList.proto` species message: identity (`id`,
+  `randomizer_banned` levels), `oneof form_of` (is a form) vs `dex`
+  block (name, category, description, dex nums, body color, egg groups,
+  height/weight, scales), stats, `ability:` ×≤3, `innate:` ×≤3,
+  learnsets, evolutions, graphics refs, `percent_female`, `bp_cost`.
+
 ## Gotchas
 
 - **Enum/proto edits require a jar rebuild**: changing `proto/*Enum.proto`
